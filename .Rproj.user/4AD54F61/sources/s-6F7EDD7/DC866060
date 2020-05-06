@@ -1,0 +1,25 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1588725357435.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "DC866060",
+    "lastKnownWriteTime" : 1588725969,
+    "last_content_update" : 1588725969844,
+    "path" : "/Volumes/GoogleDrive/My Drive/2019-2020 (Junior Year)/Spring 2020/SDS 348/SDS-348-Spring-2020/Project 3/Website/config.toml",
+    "project_path" : "config.toml",
+    "properties" : {
+        "cursorPosition" : "32,13",
+        "scrollLine" : "0"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 2,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "toml"
+}

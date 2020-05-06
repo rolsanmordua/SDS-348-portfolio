@@ -1,0 +1,426 @@
+---
+title: |
+  | Diversity Across the Fortune 500  
+  | SDS 348 w/ Dr. Woodward, March 2020  
+  | R. Santiago Moreno, rsm2785
+output:
+ pdf_document: default
+  word_document: default 
+  html_document:
+    toc: yes
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+---
+
+```{r global_options, include=FALSE}
+library(knitr)
+opts_chunk$set(fig.align="center", fig.height=5, message=FALSE, fig.width=8,tidy.opts=list(width.cutoff=60),tidy=TRUE)
+```
+
+## Data Set Attributions
+Both of my datasets were acquired from Kaggle.
+
+My `Fortune 500 Diversity` dataset was acquired from: [https://www.kaggle.com/fortune-inc/f500-diversity](https://www.kaggle.com/fortune-inc/f500-diversity), uploaded by user `Fortune`
+
+My general `Fortune 500` dataset was acquired from: [https://www.kaggle.com/vineetjaiswal/fortune500-2017](https://www.kaggle.com/vineetjaiswal/fortune500-2017), uploaded by user `Vineet`
+
+## Introduction
+I chose two datasets from Kaggle on the Fortune 500 companies from 2017. One data set is generic information on the Fortune 500 with numerical and categorical variables such as Fortune 500 rank, company name, website, sector (as in industry), HQ location, CEO, revenues, profits, and other financial data. The other dataset is diversity data based on `Equal Employment Opportunity Office` (EEOO) data posted publicly by respective companies of the Fortune 500. For companies that have data available, there are variables like Fortune 500 Rank, EEOO data URLs, year of data collection, head counts by race and gender, etc.
+
+I have researched underrepresented minority diversity data in the tech sector before but wanted to see what diversity looked like at a broader scale across Fortune 500 companies. In the past, I had found it difficult to find diversity data from companies at all. I'm curious to see how homogenous the tech sector is compared to other industries and if companies that have broader product or service caterings are more diverse than pure tech Fortune 500 companies (e.g. "BigN" or "FAANG" companies). This resonates with me because I'm a hispanic Computer Science major and an underrepresented minority in Computer Science and STEM, overal. I seek insight on which industries may feature stronger (or weaker) diversity since a Computer Science background can integrate well with a variety of industries (automotive, healthcare, retail, etc). Furthermore, I am considering doing research on this topic for a panel at the annual `Tapia Celebration of Diversity Conference` or maybe even my `Scientific Computation and Data Science` certificate research course. 
+
+I anticipate to find specialized industries like tech and perhaps healthcare having less diversity than more broadly serving Fortune 500 companies in retail (e.g. Walmart or Costco). 
+
+``` {R}
+# Install packages and import libraries
+# If not installed, uncomment 4 lines below
+# install.packages("tidyverse")
+# install.packages("dplyr")
+# install.packages("tidyr")
+options(repos = list(CRAN="http://cran.rstudio.com/"))
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+```
+
+```{R}
+# Clear data in RStudio first
+rm(list = ls())
+# Read in data sets from Kaggle
+div_data_f500 <- read.csv("F500-diversity-2017-data.csv")
+div_dict <- read.csv("data-dict.csv")
+data_f500 <- read.csv("F500-2017-generic.csv")
+```
+
+# Tidy Data
+## Fixing NAs
+Before I begin any sort of tidying or analysis, I have to fix the way some NA entries were encoded in my diversity dataset The original dataset just has "n/a" Strings so I am replacing them with 0 values. I am also dropping any of the Fortune 500 companies that don't have diversity data available. This effectively brings down the count from 500 to just 100! Of these 100 companies, only 16 have complete data with 84 listing partial data availability. 
+```{R}
+# Drop rows with columns that have "n/a" for data.url
+div_data_f500 <- div_data_f500 %>% filter(!grepl('n/a', data.url))
+
+# Figure out how many datasets have complete vs incomplete data
+div_data_f500 %>% group_by(data.avail) %>% tally()
+
+# Replace all "n/a" and NA values with 0 so I can use them as numerics
+div_data_f500 <- div_data_f500 %>% mutate_all(suppressWarnings(funs(str_replace_all(., c("n/a"), '0'))))
+div_data_f500 <- div_data_f500 %>% mutate_all(suppressWarnings(funs(replace_na(., 0))))
+```
+
+Now I need to make sure my numeric variables are treated as numerics (for some reason they aren't as read in) so I will mutate my numeric variable columns as numerics. Finally, I will start a new dataframe with just my tidied data called `div_data_tidy` with selected columns that I will work with moving forwards.
+```{R}
+# Prep new working diversity data set
+
+# Values that need to be converted from character to numeric
+numerics <- c("f500.2017.rank", "HISPM1", "HISPM1_2", "HISPM2", "HISPM3", "HISPM4", "HISPM5", "HISPM6", "HISPM7", "HISPM8", "HISPM9", "HISPM10", "HISPM11", "HISPF1", "HISPF1_2", "HISPF2", "HISPF3", "HISPF4", "HISPF5", "HISPF6", "HISPF7", "HISPF8", "HISPF9", "HISPF10", "HISPF11", "WHM1", "WHM1_2", "WHM2", "WHM3", "WHM4", "WHM5", "WHM6", "WHM7", "WHM8", "WHM9", "WHM10", "WHM11", "BLKM1", "BLKM1_2", "BLKM2", "BLKM3", "BLKM4", "BLKM5", "BLKM6", "BLKM7", "BLKM8", "BLKM9", "BLKM10", "BLKM11", "NHOPIM1", "NHOPIM1_2", "NHOPIM2", "NHOPIM3", "NHOPIM4", "NHOPIM5", "NHOPIM6", "NHOPIM7", "NHOPIM8", "NHOPIM9", "NHOPIM10", "NHOPIM11", "ASIANM1", "ASIANM1_2", "ASIANM2", "ASIANM3", "ASIANM4", "ASIANM5", "ASIANM6", "ASIANM7", "ASIANM8", "ASIANM9", "ASIANM10", "ASIANM11", "AIANM1", "AIANM1_2", "AIANM2", "AIANM3", "AIANM4", "AIANM5", "AIANM6", "AIANM7", "AIANM8", "AIANM9", "AIANM10", "AIANM11", "TOMRM1", "TOMRM1_2", "TOMRM2", "TOMRM3", "TOMRM4", "TOMRM5", "TOMRM6", "TOMRM7", "TOMRM8", "TOMRM9", "TOMRM10", "TOMRM11", "WHF1", "WHF1_2", "WHF2", "WHF3", "WHF4", "WHF5", "WHF6", "WHF7", "WHF8", "WHF9", "WHF10", "WHF11", "BLKF1", "BLKF1_2", "BLKF2", "BLKF3", "BLKF4", "BLKF5", "BLKF6", "BLKF7", "BLKF8", "BLKF9", "BLKF10", "BLKF11", "NHOPIF1", "NHOPIF1_2", "NHOPIF2", "NHOPIF3", "NHOPIF4", "NHOPIF5", "NHOPIF6", "NHOPIF7", "NHOPIF8", "NHOPIF9", "NHOPIF10", "NHOPIF11", "ASIANF1", "ASIANF1_2", "ASIANF2", "ASIANF3", "ASIANF4", "ASIANF5", "ASIANF6", "ASIANF7", "ASIANF8", "ASIANF9", "ASIANF10", "ASIANF11", "AIANF1", "AIANF1_2", "AIANF2", "AIANF3", "AIANF4", "AIANF5", "AIANF6", "AIANF7", "AIANF8", "AIANF9", "AIANF10", "AIANF11", "TOMRF1", "TOMRF1_2", "TOMRF2", "TOMRF3", "TOMRF4", "TOMRF5", "TOMRF6", "TOMRF7", "TOMRF8", "TOMRF9", "TOMRF10", "TOMRF11", "FT1", "FT1_2", "FT2", "FT3", "FT4", "FT5", "FT6", "FT7", "FT8", "FT9", "FT10", "FT11", "MT1", "MT1_2", "MT2", "MT3", "MT4", "MT5", "MT6", "MT7", "MT8", "MT9", "MT10", "MT11", "TOTAL1", "TOTAL1_2", "TOTAL2", "TOTAL3", "TOTAL4", "TOTAL5", "TOTAL6", "TOTAL7", "TOTAL8", "TOTAL9")
+
+# Store casted numeric values in original dataframe
+div_data_f500 <- div_data_f500 %>% mutate_at(numerics, ~as.numeric(as.character(.)))
+
+# f500.2017.rank, name, data.avail, data.url, diversity.pg.url, data.year into new tidy working data set
+div_data_tidy <- div_data_f500 %>% select("f500.2017.rank", "name", "data.avail", "data.url", "diversity.pg.url", "data.year")
+
+```
+
+Now that all my data is properly formatted to work with, I will tidy it so I can leverage it for analysis. 
+``` {R}
+# HISP
+div_data_tidy <- cbind(div_data_tidy, div_data_f500 %>% select(contains("HISPM")) %>% transmute(HISP_MALE_TOTAL = rowSums(.)))
+div_data_tidy <- cbind(div_data_tidy, div_data_f500 %>% select(contains("HISPF")) %>% transmute(HISP_FEMALE_TOTAL = rowSums(.)))
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% select(contains("HISP")) %>% transmute(HISP_TOTAL = rowSums(.)))
+
+
+#WH
+div_data_tidy <- cbind(div_data_tidy, div_data_f500 %>% select(contains("WHM")) %>% transmute(WH_MALE_TOTAL = rowSums(.)))
+div_data_tidy <- cbind(div_data_tidy, div_data_f500 %>% select(contains("WHF")) %>% transmute(WH_FEMALE_TOTAL = rowSums(.)))
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% select(contains("WH")) %>% transmute(WH_TOTAL = rowSums(.)))
+
+
+#BLK
+div_data_tidy <- cbind(div_data_tidy, div_data_f500 %>% select(contains("BLKM")) %>% transmute(BLK_MALE_TOTAL = rowSums(.)))
+div_data_tidy <- cbind(div_data_tidy, div_data_f500 %>% select(contains("BLKF")) %>% transmute(BLK_FEMALE_TOTAL = rowSums(.)))
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% select(contains("BLK")) %>% transmute(BLK_TOTAL = rowSums(.)))
+
+
+#NHOPI
+div_data_tidy <- cbind(div_data_tidy, div_data_f500 %>% select(contains("NHOPIM")) %>% transmute(NHOPI_MALE_TOTAL = rowSums(.)))
+div_data_tidy <- cbind(div_data_tidy, div_data_f500 %>% select(contains("NHOPIF")) %>% transmute(NHOPI_FEMALE_TOTAL = rowSums(.)))
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% select(contains("NHOPI")) %>% transmute(NHOPI_TOTAL = rowSums(.)))
+
+
+#ASIAN
+div_data_tidy <- cbind(div_data_tidy, div_data_f500 %>% select(contains("ASIANM")) %>% transmute(ASIAN_MALE_TOTAL = rowSums(.)))
+div_data_tidy <- cbind(div_data_tidy, div_data_f500 %>% select(contains("ASIANF")) %>% transmute(ASIAN_FEMALE_TOTAL = rowSums(.)))
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% select(contains("ASIAN")) %>% transmute(ASIAN_TOTAL = rowSums(.)))
+
+
+#AIAN
+div_data_tidy <- cbind(div_data_tidy, div_data_f500 %>% select(contains("AIANM")) %>% transmute(AIAN_MALE_TOTAL = rowSums(.)))
+div_data_tidy <- cbind(div_data_tidy, div_data_f500 %>% select(contains("AIANF")) %>% transmute(AIAN_FEMALE_TOTAL = rowSums(.)))
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% select(contains("AIAN")) %>% transmute(AIAN_TOTAL = rowSums(.)))
+
+
+#TOMR
+div_data_tidy <- cbind(div_data_tidy, div_data_f500 %>% select(contains("TOMRM")) %>% transmute(TOMR_MALE_TOTAL = rowSums(.)))
+div_data_tidy <- cbind(div_data_tidy, div_data_f500 %>% select(contains("TOMRF")) %>% transmute(TOMR_FEMALE_TOTAL = rowSums(.)))
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% select(contains("TOMR")) %>% transmute(TOMR_TOTAL = rowSums(.)))
+
+
+#Totals
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% select(contains("_MALE")) %>% transmute(TOTAL_MALE_ALL = rowSums(.)))
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% select(contains("_FEMALE")) %>% transmute(TOTAL_FEMALE_ALL = rowSums(.)))
+# Handle over counting by dividing by 2
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% select(contains("MALE_")) %>% transmute(TOTAL_ALL = rowSums(.) / 2))
+```
+
+It turns out that our "partial" data isn't actually useful at all, so I need to drop it :(. This introduces a major limitation to the results from this data because I have to drop 84 companies. These 84 companies represented sectors such as Energy, Health Care, Business Services, Retailing, and others. After dropping these companies that had "partial" data but no EEOO data, I am left with 14 companies of which most are in the Technology sector. 
+```{R}
+
+# Actually need to drop partial data too, it doesn't contain any actual data
+div_data_tidy %>% filter(data.avail == "Partial") %>% head()
+
+# See which sectors the 100 companies with some level of diversity data represented
+inner_join(div_data_tidy, data_f500, by = c("f500.2017.rank" = "Rank")) %>% select(Sector) %>% summary()
+
+# Store the companies that have complete EEOO data to run analysis on
+div_data_tidy <- div_data_tidy %>% filter(data.avail != "Partial") %>% drop_na()
+inner_join(div_data_tidy, data_f500, by = c("f500.2017.rank" = "Rank")) %>% filter(data.avail != "Partial") %>% drop_na() %>% select(Sector) %>% summary()
+```
+
+# Data Wrangling
+Now that my data is tidy, I am going to go ahead and mutate my `div_data_tidy` dataframe to include columns for percentages of each race and gender group in additon to a column for the percentage of the entire race (independent of gender) relative to the total head count for each company. I was initially going to use the `percent()` function but this doesn't return a numeric value so I opted to just calculate it manually and multiply by 100. The approach is kinda gross but it works :) 
+```{R}
+# Calculate percentages
+
+# HISP
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% transmute(HISP_MALE_TOTAL_PERCENT = (HISP_MALE_TOTAL / TOTAL_ALL) * 100))
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% transmute(HISP_FEMALE_TOTAL_PERCENT = (HISP_FEMALE_TOTAL / TOTAL_ALL) * 100))
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% transmute(HISP_TOTAL_PERCENT = ((HISP_MALE_TOTAL + HISP_FEMALE_TOTAL) / TOTAL_ALL) * 100))
+
+
+#WH
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% transmute(WH_MALE_TOTAL_PERCENT = (WH_MALE_TOTAL / TOTAL_ALL) * 100))
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% transmute(WH_FEMALE_TOTAL_PERCENT = (WH_FEMALE_TOTAL / TOTAL_ALL) * 100))
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% transmute(WH_TOTAL_PERCENT = ((WH_MALE_TOTAL + WH_FEMALE_TOTAL) / TOTAL_ALL) * 100))
+
+
+#BLK
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% transmute(BLK_MALE_TOTAL_PERCENT = (BLK_MALE_TOTAL / TOTAL_ALL) * 100))
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% transmute(BLK_FEMALE_TOTAL_PERCENT = (BLK_FEMALE_TOTAL / TOTAL_ALL) * 100))
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% transmute(BLK_TOTAL_PERCENT = ((BLK_MALE_TOTAL + BLK_FEMALE_TOTAL) / TOTAL_ALL) * 100))
+
+
+#NHOPI
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% transmute(NHOPI_MALE_TOTAL_PERCENT = (NHOPI_MALE_TOTAL / TOTAL_ALL) * 100))
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% transmute(NHOPI_FEMALE_TOTAL_PERCENT = (NHOPI_FEMALE_TOTAL / TOTAL_ALL) * 100))
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% transmute(NHOPI_TOTAL_PERCENT = ((NHOPI_MALE_TOTAL + NHOPI_FEMALE_TOTAL) / TOTAL_ALL) * 100))
+
+
+#ASIAN
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% transmute(ASIAN_MALE_TOTAL_PERCENT = (ASIAN_MALE_TOTAL / TOTAL_ALL) * 100))
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% transmute(ASIAN_FEMALE_TOTAL_PERCENT = (ASIAN_FEMALE_TOTAL / TOTAL_ALL) * 100))
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% transmute(ASIAN_TOTAL_PERCENT = ((ASIAN_MALE_TOTAL + ASIAN_FEMALE_TOTAL) / TOTAL_ALL) * 100))
+
+
+#AIAN
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% transmute(AIAN_MALE_TOTAL_PERCENT = (AIAN_MALE_TOTAL / TOTAL_ALL) * 100))
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% transmute(AIAN_FEMALE_TOTAL_PERCENT = (AIAN_FEMALE_TOTAL / TOTAL_ALL) * 100))
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% transmute(AIAN_TOTAL_PERCENT = ((AIAN_MALE_TOTAL + AIAN_FEMALE_TOTAL) / TOTAL_ALL) * 100))
+
+
+#TOMR
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% transmute(TOMR_MALE_TOTAL_PERCENT = (TOMR_MALE_TOTAL / TOTAL_ALL) * 100))
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% transmute(TOMR_FEMALE_TOTAL_PERCENT = (TOMR_FEMALE_TOTAL / TOTAL_ALL) * 100))
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% transmute(TOMR_TOTAL_PERCENT = ((TOMR_MALE_TOTAL + TOMR_FEMALE_TOTAL) / TOTAL_ALL) * 100))
+
+
+#Totals
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% transmute(TOTAL_MALE_TOTAL_PERCENT = (TOTAL_MALE_ALL / TOTAL_ALL) * 100))
+div_data_tidy <- cbind(div_data_tidy, div_data_tidy %>% transmute(TOTAL_FEMALE_TOTAL_PERCENT = (TOTAL_FEMALE_ALL / TOTAL_ALL) * 100))
+
+```
+
+There isn't much tidying to do for the general `Fortune 500` file, I just want to drop various columns related to HQ (address, city, state, telephone, etc) and financial information I don't plan to use for my exploratory analysis.
+``` {R}
+# Tidy the generic Fortune 500 file
+# Keep Keep Rank, Title, Website, Sector, Hqcity, Hqstate, Hqzip, 
+data_f500_tidy <- data_f500 %>% select(c("Rank", "Title", "Website", "Sector", "Hqcity", "Hqstate", "Hqzip"))
+```
+
+# Join Tidied Data Sets
+I am opting to use `inner_join()` because I want to select the rows that have matching values in both tables. In this case, that means the selected values that did have usable data from the tidied diversity data set. 
+
+This effectively drops 486 rows/companies from the Fortune 500 that don't have complete data. Of the companies left, 12/14 are in Technology, 1/14 is in Retailing, and 1/14 in Financials sectors. Furthermore, 10/14 are California headquarted companies, 3/14 are Washington heardquarted companies, and 1/14 Illinois headquartered company. Again, limitations of my findings because - unfortunately - the majority (~97%) of the Fortune 500 (as of 2017 when dataset was made), doesn't report diversity data. 
+
+```{R}
+# Join the two data sets now
+joined_data <- inner_join(div_data_tidy, data_f500_tidy, by = c("f500.2017.rank" = "Rank"))
+
+#Some quick insights
+nrow(data_f500_tidy) - nrow(div_data_tidy)
+joined_data %>% group_by(Sector) %>% summarize(n())
+joined_data %>% group_by(Hqstate) %>% summarize(n())
+```
+
+# Summary Statistics
+```{R}
+library(knitr)
+library(kableExtra)
+
+# Create summary statistics (mean, sd, var, n, quantile, min, max, n_distinct, cor, etc) for each of your numeric variables both overall and after grouping by one of your categorical variables
+
+options(scipen=999)
+summary_stat_vars <- c("HISP_MALE_TOTAL_PERCENT", "HISP_FEMALE_TOTAL_PERCENT", "HISP_TOTAL_PERCENT", "WH_MALE_TOTAL_PERCENT", "WH_FEMALE_TOTAL_PERCENT", "WH_TOTAL_PERCENT", "BLK_MALE_TOTAL_PERCENT", "BLK_FEMALE_TOTAL_PERCENT", "BLK_TOTAL_PERCENT", "NHOPI_MALE_TOTAL_PERCENT", "NHOPI_FEMALE_TOTAL_PERCENT", "NHOPI_TOTAL_PERCENT", "ASIAN_MALE_TOTAL_PERCENT", "ASIAN_FEMALE_TOTAL_PERCENT", "ASIAN_TOTAL_PERCENT", "AIAN_MALE_TOTAL_PERCENT", "AIAN_FEMALE_TOTAL_PERCENT", "AIAN_TOTAL_PERCENT", "TOMR_MALE_TOTAL_PERCENT", "TOMR_FEMALE_TOTAL_PERCENT", "TOMR_TOTAL_PERCENT", "TOTAL_MALE_TOTAL_PERCENT", "TOTAL_FEMALE_TOTAL_PERCENT")
+
+summaryDat <- joined_data %>% select(summary_stat_vars) %>% select_if(is.numeric)
+
+# mean
+summaryDat %>% summarize_all(list(Mean=mean))
+
+# sd
+summaryDat %>% summarize_all(list(StdDev = sd))
+
+# variance
+summaryDat %>% summarize_all(list(Variance = var))
+
+# min
+summaryDat %>% summarize_all(list(Min = min))
+
+# max
+summaryDat %>% summarize_all(list(Max = max))
+
+```
+
+# Visualizations
+I am making two stacked bar graph GGPlots, one for the distribution of races by state and one for the distribution of races by sector. I tried using `stat="summary"` but it broke my stacked bar graph and put the bars side to side which defeats the purpose of the graph I'm trying to depict.
+
+```{R}
+library(ggplot2)
+library(scales)
+library(RColorBrewer)
+
+# GGPlot1
+
+# Get diversity data by company and state
+race_stats_by_company_and_state <- joined_data %>% select(c("Hqstate", "HISP_TOTAL", "WH_TOTAL", "BLK_TOTAL", "NHOPI_TOTAL", "ASIAN_TOTAL","AIAN_TOTAL", "TOMR_TOTAL")) %>% arrange(Hqstate)
+
+# Collapse rows into summaries by individual state instead of companies
+race_stats_by_state <- race_stats_by_company_and_state %>% group_by(Hqstate) %>% summarize_each(funs(sum))
+
+# Plot the distribution of Races by state
+
+pivoted_race <- race_stats_by_state %>% pivot_longer(-Hqstate, names_to = "Race", values_to = "Count")
+
+ggplot1 <- ggplot(data = pivoted_race, aes(x = Hqstate, y = Count, fill = Race)) + geom_bar(position="fill", stat="identity") + scale_y_continuous(name="EEOO Races", labels = percent, breaks = scales::pretty_breaks(n = 10)) + scale_x_discrete(name = "Company's HQ State", labels = c("California", "Illinois", "Washington")) + labs(x = "State", y = "Percentage") + 
+  scale_fill_manual("Race Legend", labels=c("Native American", "Asian", "Black", "Hispanic", "Native Hawaiian", "Multiracial", "White"), values=brewer.pal(n = 7, name = 'YlOrRd')) + ggtitle("Distribution of Races By State Amongst Fortune 500")
+ggplot1
+```
+Based on this first stacked bar graph GGPlot, I can see that Illinois has a significantly greater distribution of a white workforce than either California or Washington that are roughly on par. According to the plotted data, California's second largest racial group in the workforce is Asians whereas it's Hispanics in Illinois (althoug it's closely followed by African Americans) and Washington.  
+
+
+```{R}  
+# GGPlot2
+# Plot the distribution of Races by Industry
+  
+# Get diversity data by company and state
+race_stats_by_company_and_sector <- joined_data %>% select(c("Sector", "HISP_TOTAL", "WH_TOTAL", "BLK_TOTAL", "NHOPI_TOTAL", "ASIAN_TOTAL","AIAN_TOTAL", "TOMR_TOTAL")) %>% arrange(Sector)
+
+# Collapse rows into summaries by individual state instead of companies
+race_stats_by_sector <- race_stats_by_company_and_sector %>% group_by(Sector) %>% summarize_each(funs(sum))
+
+# Plot the distribution of Races by state
+
+pivoted_sector <- race_stats_by_sector %>% pivot_longer(-Sector, names_to = "Race", values_to = "Count")
+
+ggplot2 <- ggplot(data = pivoted_sector, aes(x = Sector, y = Count, fill = Race)) + geom_bar(position="fill", stat="identity") + 
+  scale_y_continuous(name="EEOO Races", labels = percent, breaks = scales::pretty_breaks(n = 10)) + labs(x = "Sector", y = "Percentage") + 
+  scale_fill_manual("Race Legend", labels=c("Native American", "Asian", "Black", "Hispanic", "Native Hawaiian", "Multiracial", "White"), values=brewer.pal(n = 7, name = 'YlOrRd')) + ggtitle("Distribution of Races By Sector Amongst Fortune 500") #+ 
+  geom_text(aes(label = percent(Count/sum(Count))), size = 2, position = position_fill(vjust=0.5))
+  ggplot2
+```
+On my second stacked bar graph GGPlot, I can see an interesting trend regarding various sectors of industry. Financials is over 75% white whereas the cumulative racial distribution of Retailing and Technology is closer to ~55%. Retailing and Financial's second largest group is Hispanic whereas it's Asian for technology (no surprise there). 
+
+# Correlation Heatmap
+```{R}
+# Correlation heatmap
+# Source: http://www.sthda.com/english/wiki/ggplot2-quick-correlation-matrix-heatmap-r-software-and-data-visualization
+all <- joined_data %>% select(c("HISP_TOTAL", "WH_TOTAL", "BLK_TOTAL", "NHOPI_TOTAL", "ASIAN_TOTAL","AIAN_TOTAL", "TOMR_TOTAL"))
+
+as_percent <- joined_data %>% select(c("HISP_TOTAL", "WH_TOTAL", "BLK_TOTAL", "NHOPI_TOTAL", "ASIAN_TOTAL","AIAN_TOTAL", "TOMR_TOTAL")) %>%
+  mutate("Hispanic" = HISP_TOTAL / rowSums(all) * 100) %>%
+  mutate("White" = WH_TOTAL / rowSums(all) * 100) %>% 
+  mutate("Black" = BLK_TOTAL / rowSums(all) * 100) %>%
+  mutate("Hawaiian" = NHOPI_TOTAL / rowSums(all) * 100) %>% 
+  mutate("Asian" = ASIAN_TOTAL / rowSums(all) * 100) %>% 
+  mutate("Native American" = AIAN_TOTAL / rowSums(all) * 100) %>%
+  mutate("Multiracial" = TOMR_TOTAL / rowSums(all) * 100) %>%
+  select(c("Hispanic", "White", "Black", "Hawaiian", "Asian", "Asian", "Native American", "Multiracial"))
+
+cormat <- round(cor(as_percent),2)
+
+library(reshape2)
+melted_cormat <- melt(cormat)
+
+library(ggplot2)
+
+# Get lower triangle of the correlation matrix
+  get_lower_tri<-function(cormat){
+    cormat[upper.tri(cormat)] <- NA
+    return(cormat)
+  }
+  # Get upper triangle of the correlation matrix
+  get_upper_tri <- function(cormat){
+    cormat[lower.tri(cormat)]<- NA
+    return(cormat)
+  }
+  
+upper_tri <- get_upper_tri(cormat)
+upper_tri
+
+# Melt the correlation matrix
+melted_cormat <- melt(upper_tri, na.rm = TRUE)
+
+heatmap <- ggplot(data = melted_cormat, aes(Var2, Var1, fill = value))+
+ geom_tile(color = "white")+
+ scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0, limit = c(-1,1), space = "Lab", 
+   name="Pearson\nCorrelation") +
+  theme_minimal()+ 
+ theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+    size = 12, hjust = 1))+coord_fixed()
+
+heatmap <- heatmap + geom_text(aes(Var2, Var1, label = value), color = "black", size = 4) +
+theme(
+  panel.grid.major = element_blank(),
+  panel.border = element_blank(),
+  panel.background = element_blank(),
+  axis.ticks = element_blank(),
+  legend.justification = c(1, 0),
+  legend.position = c(0.6, 0.7),
+  legend.direction = "horizontal") +
+  guides(fill = guide_colorbar(barwidth = 7, barheight = 1, title.position = "top", title.hjust = 0.5)) + 
+  ggtitle("Correlation Heatmap of Races Amongst Fortune 500")
+
+heatmap
+```
+
+# Principal Component Analysis
+```{R}
+# Principal Component Analysis (PCA) code from WS11 for SDS 348 by Dr. Woodward
+library(dplyr)
+library(ggplot2)
+
+# Tidy Names
+all <- joined_data %>% select(c("name", "HISP_TOTAL", "WH_TOTAL", "BLK_TOTAL", "NHOPI_TOTAL", "ASIAN_TOTAL","AIAN_TOTAL", "TOMR_TOTAL")) %>%
+  rename("Hispanic" = HISP_TOTAL) %>%
+  rename("White" = WH_TOTAL) %>% 
+  rename("Black" = BLK_TOTAL) %>%
+  rename("Hawaiian" = NHOPI_TOTAL) %>% 
+  rename("Asian" = ASIAN_TOTAL) %>% 
+  rename("Native American" = AIAN_TOTAL) %>%
+  rename("Multiracial" = TOMR_TOTAL)
+
+all_nums <- all %>% select_if(is.numeric) %>% scale()
+
+rownames(all_nums) <- all$name
+all_pca<-princomp(all_nums)
+names(all_pca)
+
+summary(all_pca, loadings=T)
+
+eigval<-all_pca$sdev^2 #square to convert SDs to eigenvalues
+varprop=round(eigval/sum(eigval),2) #proportion of var explained by each PC
+
+ggplot()+geom_bar(aes(y=varprop,x=1:7),stat="identity")+xlab("")+geom_path(aes(y=varprop,x=1:7))+
+  geom_text(aes(x=1:7,y=varprop,label=round(varprop,2)),vjust=1,col="white",size=5)+
+  scale_y_continuous(breaks=seq(0,.6,.2),labels = scales::percent)+
+  scale_x_continuous(breaks=1:10)
+
+
+round(cumsum(eigval)/sum(eigval),2) #cumulative proportion of variance
+eigval #eigenvalues
+
+eigen(cor(all_nums))
+
+# Run princomp() to get further insights into eigenvectors and dimensions
+pca_1 <- princomp(all_nums)
+summary(pca_1, loadings = TRUE)
+
+alldf <- data.frame(PC1=all_pca$scores[,1], PC2=all_pca$scores[,2])
+ggplot(alldf,aes(PC1, PC2))+geom_point()
+
+ggplot(alldf, aes(PC1, PC2)) + geom_point() +
+  stat_ellipse(data = alldf[alldf$PC1 < max(alldf$PC1),], aes(PC1,PC2),color = "blue") +
+  stat_ellipse(data = alldf[alldf$PC1 > min(alldf$PC1),], aes(PC1,PC2),color = "blue") +
+  stat_ellipse(data = alldf[alldf$PC2 < max(alldf$PC2),], aes(PC1,PC2),color = "red") +
+  stat_ellipse(data = alldf[alldf$PC2 > min(alldf$PC2),], aes(PC1,PC2),color = "red")
+
+# Full plot of items plotted
+install.packages("factoextra")
+library(factoextra)
+fviz_pca_biplot(all_pca, labelsize = 2, pointsize = 1)
+```
+On the x-axis, Dim1 represents the size of the company (head count wise) whereas Dim2 represents the influence of races. We see the arrow corresponding to Asian showing up more skewed towards tech-sector companies like Intel, Microsoft, HP, Apple, Alphabet, etc which aligns with demographic data. Meanwhile, larger companies like Costco or Amazon with a high amount of employees have greater racial workforce diversity. We also see that the arrows for Native American, White, Black, and Multiracial are closely coupled near 0 whereas Asian and the Hawaiian, Hispanic pairings are more spread apart from the main arrow grouping because they have a greater influence on the racial makeup of a company. This suggests that Asian or Hawaiian, Hispanic demographics pull the demographics of a company in either direction. This needs to be taken with a grain of salt though because the data is skewed towards tech companies since 12/14 companies reporting data were in the Technology sector. 
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
