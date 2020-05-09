@@ -1,0 +1,786 @@
+---
+title: |
+  | Diversity Across the Fortune 500  
+  | SDS 348 w/ Dr. Woodward, March 2020  
+  | R. Santiago Moreno, rsm2785
+output:
+  html_document
+---
+
+
+
+<div id="data-set-attributions" class="section level2">
+<h2>Data Set Attributions</h2>
+<p>Both of my datasets were acquired from Kaggle.</p>
+<p>My <code>Fortune 500 Diversity</code> dataset was acquired from: <a href="https://www.kaggle.com/fortune-inc/f500-diversity">https://www.kaggle.com/fortune-inc/f500-diversity</a>, uploaded by user <code>Fortune</code></p>
+<p>My general <code>Fortune 500</code> dataset was acquired from: <a href="https://www.kaggle.com/vineetjaiswal/fortune500-2017">https://www.kaggle.com/vineetjaiswal/fortune500-2017</a>, uploaded by user <code>Vineet</code></p>
+</div>
+<div id="introduction" class="section level2">
+<h2>Introduction</h2>
+<p>I chose two datasets from Kaggle on the Fortune 500 companies from 2017. One data set is generic information on the Fortune 500 with numerical and categorical variables such as Fortune 500 rank, company name, website, sector (as in industry), HQ location, CEO, revenues, profits, and other financial data. The other dataset is diversity data based on <code>Equal Employment Opportunity Office</code> (EEOO) data posted publicly by respective companies of the Fortune 500. For companies that have data available, there are variables like Fortune 500 Rank, EEOO data URLs, year of data collection, head counts by race and gender, etc.</p>
+<p>I have researched underrepresented minority diversity data in the tech sector before but wanted to see what diversity looked like at a broader scale across Fortune 500 companies. In the past, I had found it difficult to find diversity data from companies at all. I’m curious to see how homogenous the tech sector is compared to other industries and if companies that have broader product or service caterings are more diverse than pure tech Fortune 500 companies (e.g. “BigN” or “FAANG” companies). This resonates with me because I’m a hispanic Computer Science major and an underrepresented minority in Computer Science and STEM, overal. I seek insight on which industries may feature stronger (or weaker) diversity since a Computer Science background can integrate well with a variety of industries (automotive, healthcare, retail, etc). Furthermore, I am considering doing research on this topic for a panel at the annual <code>Tapia Celebration of Diversity Conference</code> or maybe even my <code>Scientific Computation and Data Science</code> certificate research course.</p>
+<p>I anticipate to find specialized industries like tech and perhaps healthcare having less diversity than more broadly serving Fortune 500 companies in retail (e.g. Walmart or Costco).</p>
+<pre class="r"><code># Install packages and import libraries If not installed,
+# uncomment 4 lines below install.packages(&#39;tidyverse&#39;)
+# install.packages(&#39;dplyr&#39;) install.packages(&#39;tidyr&#39;)
+options(repos = list(CRAN = &quot;http://cran.rstudio.com/&quot;))
+library(tidyverse)
+library(dplyr)
+library(tidyr)</code></pre>
+<pre class="r"><code># Clear data in RStudio first
+rm(list = ls())
+# Read in data sets from Kaggle
+div_data_f500 &lt;- read.csv(&quot;F500-diversity-2017-data.csv&quot;)
+div_dict &lt;- read.csv(&quot;data-dict.csv&quot;)
+data_f500 &lt;- read.csv(&quot;F500-2017-generic.csv&quot;)</code></pre>
+</div>
+<div id="tidy-data" class="section level1">
+<h1>Tidy Data</h1>
+<div id="fixing-nas" class="section level2">
+<h2>Fixing NAs</h2>
+<p>Before I begin any sort of tidying or analysis, I have to fix the way some NA entries were encoded in my diversity dataset The original dataset just has “n/a” Strings so I am replacing them with 0 values. I am also dropping any of the Fortune 500 companies that don’t have diversity data available. This effectively brings down the count from 500 to just 100! Of these 100 companies, only 16 have complete data with 84 listing partial data availability.</p>
+<pre class="r"><code># Drop rows with columns that have &#39;n/a&#39; for data.url
+div_data_f500 &lt;- div_data_f500 %&gt;% filter(!grepl(&quot;n/a&quot;, data.url))
+
+# Figure out how many datasets have complete vs incomplete
+# data
+div_data_f500 %&gt;% group_by(data.avail) %&gt;% tally()</code></pre>
+<pre><code>## # A tibble: 2 x 2
+##   data.avail     n
+##   &lt;fct&gt;      &lt;int&gt;
+## 1 Partial       84
+## 2 Y             16</code></pre>
+<pre class="r"><code># Replace all &#39;n/a&#39; and NA values with 0 so I can use them as
+# numerics
+div_data_f500 &lt;- div_data_f500 %&gt;% mutate_all(suppressWarnings(funs(str_replace_all(., 
+    c(&quot;n/a&quot;), &quot;0&quot;))))
+div_data_f500 &lt;- div_data_f500 %&gt;% mutate_all(suppressWarnings(funs(replace_na(., 
+    0))))</code></pre>
+<p>Now I need to make sure my numeric variables are treated as numerics (for some reason they aren’t as read in) so I will mutate my numeric variable columns as numerics. Finally, I will start a new dataframe with just my tidied data called <code>div_data_tidy</code> with selected columns that I will work with moving forwards.</p>
+<pre class="r"><code># Prep new working diversity data set
+
+# Values that need to be converted from character to numeric
+numerics &lt;- c(&quot;f500.2017.rank&quot;, &quot;HISPM1&quot;, &quot;HISPM1_2&quot;, &quot;HISPM2&quot;, 
+    &quot;HISPM3&quot;, &quot;HISPM4&quot;, &quot;HISPM5&quot;, &quot;HISPM6&quot;, &quot;HISPM7&quot;, &quot;HISPM8&quot;, 
+    &quot;HISPM9&quot;, &quot;HISPM10&quot;, &quot;HISPM11&quot;, &quot;HISPF1&quot;, &quot;HISPF1_2&quot;, &quot;HISPF2&quot;, 
+    &quot;HISPF3&quot;, &quot;HISPF4&quot;, &quot;HISPF5&quot;, &quot;HISPF6&quot;, &quot;HISPF7&quot;, &quot;HISPF8&quot;, 
+    &quot;HISPF9&quot;, &quot;HISPF10&quot;, &quot;HISPF11&quot;, &quot;WHM1&quot;, &quot;WHM1_2&quot;, &quot;WHM2&quot;, 
+    &quot;WHM3&quot;, &quot;WHM4&quot;, &quot;WHM5&quot;, &quot;WHM6&quot;, &quot;WHM7&quot;, &quot;WHM8&quot;, &quot;WHM9&quot;, &quot;WHM10&quot;, 
+    &quot;WHM11&quot;, &quot;BLKM1&quot;, &quot;BLKM1_2&quot;, &quot;BLKM2&quot;, &quot;BLKM3&quot;, &quot;BLKM4&quot;, &quot;BLKM5&quot;, 
+    &quot;BLKM6&quot;, &quot;BLKM7&quot;, &quot;BLKM8&quot;, &quot;BLKM9&quot;, &quot;BLKM10&quot;, &quot;BLKM11&quot;, &quot;NHOPIM1&quot;, 
+    &quot;NHOPIM1_2&quot;, &quot;NHOPIM2&quot;, &quot;NHOPIM3&quot;, &quot;NHOPIM4&quot;, &quot;NHOPIM5&quot;, 
+    &quot;NHOPIM6&quot;, &quot;NHOPIM7&quot;, &quot;NHOPIM8&quot;, &quot;NHOPIM9&quot;, &quot;NHOPIM10&quot;, &quot;NHOPIM11&quot;, 
+    &quot;ASIANM1&quot;, &quot;ASIANM1_2&quot;, &quot;ASIANM2&quot;, &quot;ASIANM3&quot;, &quot;ASIANM4&quot;, 
+    &quot;ASIANM5&quot;, &quot;ASIANM6&quot;, &quot;ASIANM7&quot;, &quot;ASIANM8&quot;, &quot;ASIANM9&quot;, &quot;ASIANM10&quot;, 
+    &quot;ASIANM11&quot;, &quot;AIANM1&quot;, &quot;AIANM1_2&quot;, &quot;AIANM2&quot;, &quot;AIANM3&quot;, &quot;AIANM4&quot;, 
+    &quot;AIANM5&quot;, &quot;AIANM6&quot;, &quot;AIANM7&quot;, &quot;AIANM8&quot;, &quot;AIANM9&quot;, &quot;AIANM10&quot;, 
+    &quot;AIANM11&quot;, &quot;TOMRM1&quot;, &quot;TOMRM1_2&quot;, &quot;TOMRM2&quot;, &quot;TOMRM3&quot;, &quot;TOMRM4&quot;, 
+    &quot;TOMRM5&quot;, &quot;TOMRM6&quot;, &quot;TOMRM7&quot;, &quot;TOMRM8&quot;, &quot;TOMRM9&quot;, &quot;TOMRM10&quot;, 
+    &quot;TOMRM11&quot;, &quot;WHF1&quot;, &quot;WHF1_2&quot;, &quot;WHF2&quot;, &quot;WHF3&quot;, &quot;WHF4&quot;, &quot;WHF5&quot;, 
+    &quot;WHF6&quot;, &quot;WHF7&quot;, &quot;WHF8&quot;, &quot;WHF9&quot;, &quot;WHF10&quot;, &quot;WHF11&quot;, &quot;BLKF1&quot;, 
+    &quot;BLKF1_2&quot;, &quot;BLKF2&quot;, &quot;BLKF3&quot;, &quot;BLKF4&quot;, &quot;BLKF5&quot;, &quot;BLKF6&quot;, &quot;BLKF7&quot;, 
+    &quot;BLKF8&quot;, &quot;BLKF9&quot;, &quot;BLKF10&quot;, &quot;BLKF11&quot;, &quot;NHOPIF1&quot;, &quot;NHOPIF1_2&quot;, 
+    &quot;NHOPIF2&quot;, &quot;NHOPIF3&quot;, &quot;NHOPIF4&quot;, &quot;NHOPIF5&quot;, &quot;NHOPIF6&quot;, &quot;NHOPIF7&quot;, 
+    &quot;NHOPIF8&quot;, &quot;NHOPIF9&quot;, &quot;NHOPIF10&quot;, &quot;NHOPIF11&quot;, &quot;ASIANF1&quot;, 
+    &quot;ASIANF1_2&quot;, &quot;ASIANF2&quot;, &quot;ASIANF3&quot;, &quot;ASIANF4&quot;, &quot;ASIANF5&quot;, 
+    &quot;ASIANF6&quot;, &quot;ASIANF7&quot;, &quot;ASIANF8&quot;, &quot;ASIANF9&quot;, &quot;ASIANF10&quot;, &quot;ASIANF11&quot;, 
+    &quot;AIANF1&quot;, &quot;AIANF1_2&quot;, &quot;AIANF2&quot;, &quot;AIANF3&quot;, &quot;AIANF4&quot;, &quot;AIANF5&quot;, 
+    &quot;AIANF6&quot;, &quot;AIANF7&quot;, &quot;AIANF8&quot;, &quot;AIANF9&quot;, &quot;AIANF10&quot;, &quot;AIANF11&quot;, 
+    &quot;TOMRF1&quot;, &quot;TOMRF1_2&quot;, &quot;TOMRF2&quot;, &quot;TOMRF3&quot;, &quot;TOMRF4&quot;, &quot;TOMRF5&quot;, 
+    &quot;TOMRF6&quot;, &quot;TOMRF7&quot;, &quot;TOMRF8&quot;, &quot;TOMRF9&quot;, &quot;TOMRF10&quot;, &quot;TOMRF11&quot;, 
+    &quot;FT1&quot;, &quot;FT1_2&quot;, &quot;FT2&quot;, &quot;FT3&quot;, &quot;FT4&quot;, &quot;FT5&quot;, &quot;FT6&quot;, &quot;FT7&quot;, 
+    &quot;FT8&quot;, &quot;FT9&quot;, &quot;FT10&quot;, &quot;FT11&quot;, &quot;MT1&quot;, &quot;MT1_2&quot;, &quot;MT2&quot;, &quot;MT3&quot;, 
+    &quot;MT4&quot;, &quot;MT5&quot;, &quot;MT6&quot;, &quot;MT7&quot;, &quot;MT8&quot;, &quot;MT9&quot;, &quot;MT10&quot;, &quot;MT11&quot;, 
+    &quot;TOTAL1&quot;, &quot;TOTAL1_2&quot;, &quot;TOTAL2&quot;, &quot;TOTAL3&quot;, &quot;TOTAL4&quot;, &quot;TOTAL5&quot;, 
+    &quot;TOTAL6&quot;, &quot;TOTAL7&quot;, &quot;TOTAL8&quot;, &quot;TOTAL9&quot;)
+
+# Store casted numeric values in original dataframe
+div_data_f500 &lt;- div_data_f500 %&gt;% mutate_at(numerics, ~as.numeric(as.character(.)))
+
+# f500.2017.rank, name, data.avail, data.url,
+# diversity.pg.url, data.year into new tidy working data set
+div_data_tidy &lt;- div_data_f500 %&gt;% select(&quot;f500.2017.rank&quot;, &quot;name&quot;, 
+    &quot;data.avail&quot;, &quot;data.url&quot;, &quot;diversity.pg.url&quot;, &quot;data.year&quot;)</code></pre>
+<p>Now that all my data is properly formatted to work with, I will tidy it so I can leverage it for analysis.</p>
+<pre class="r"><code># HISP
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_f500 %&gt;% select(contains(&quot;HISPM&quot;)) %&gt;% 
+    transmute(HISP_MALE_TOTAL = rowSums(.)))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_f500 %&gt;% select(contains(&quot;HISPF&quot;)) %&gt;% 
+    transmute(HISP_FEMALE_TOTAL = rowSums(.)))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% select(contains(&quot;HISP&quot;)) %&gt;% 
+    transmute(HISP_TOTAL = rowSums(.)))
+
+
+# WH
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_f500 %&gt;% select(contains(&quot;WHM&quot;)) %&gt;% 
+    transmute(WH_MALE_TOTAL = rowSums(.)))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_f500 %&gt;% select(contains(&quot;WHF&quot;)) %&gt;% 
+    transmute(WH_FEMALE_TOTAL = rowSums(.)))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% select(contains(&quot;WH&quot;)) %&gt;% 
+    transmute(WH_TOTAL = rowSums(.)))
+
+
+# BLK
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_f500 %&gt;% select(contains(&quot;BLKM&quot;)) %&gt;% 
+    transmute(BLK_MALE_TOTAL = rowSums(.)))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_f500 %&gt;% select(contains(&quot;BLKF&quot;)) %&gt;% 
+    transmute(BLK_FEMALE_TOTAL = rowSums(.)))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% select(contains(&quot;BLK&quot;)) %&gt;% 
+    transmute(BLK_TOTAL = rowSums(.)))
+
+
+# NHOPI
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_f500 %&gt;% select(contains(&quot;NHOPIM&quot;)) %&gt;% 
+    transmute(NHOPI_MALE_TOTAL = rowSums(.)))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_f500 %&gt;% select(contains(&quot;NHOPIF&quot;)) %&gt;% 
+    transmute(NHOPI_FEMALE_TOTAL = rowSums(.)))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% select(contains(&quot;NHOPI&quot;)) %&gt;% 
+    transmute(NHOPI_TOTAL = rowSums(.)))
+
+
+# ASIAN
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_f500 %&gt;% select(contains(&quot;ASIANM&quot;)) %&gt;% 
+    transmute(ASIAN_MALE_TOTAL = rowSums(.)))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_f500 %&gt;% select(contains(&quot;ASIANF&quot;)) %&gt;% 
+    transmute(ASIAN_FEMALE_TOTAL = rowSums(.)))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% select(contains(&quot;ASIAN&quot;)) %&gt;% 
+    transmute(ASIAN_TOTAL = rowSums(.)))
+
+
+# AIAN
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_f500 %&gt;% select(contains(&quot;AIANM&quot;)) %&gt;% 
+    transmute(AIAN_MALE_TOTAL = rowSums(.)))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_f500 %&gt;% select(contains(&quot;AIANF&quot;)) %&gt;% 
+    transmute(AIAN_FEMALE_TOTAL = rowSums(.)))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% select(contains(&quot;AIAN&quot;)) %&gt;% 
+    transmute(AIAN_TOTAL = rowSums(.)))
+
+
+# TOMR
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_f500 %&gt;% select(contains(&quot;TOMRM&quot;)) %&gt;% 
+    transmute(TOMR_MALE_TOTAL = rowSums(.)))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_f500 %&gt;% select(contains(&quot;TOMRF&quot;)) %&gt;% 
+    transmute(TOMR_FEMALE_TOTAL = rowSums(.)))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% select(contains(&quot;TOMR&quot;)) %&gt;% 
+    transmute(TOMR_TOTAL = rowSums(.)))
+
+
+# Totals
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% select(contains(&quot;_MALE&quot;)) %&gt;% 
+    transmute(TOTAL_MALE_ALL = rowSums(.)))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% select(contains(&quot;_FEMALE&quot;)) %&gt;% 
+    transmute(TOTAL_FEMALE_ALL = rowSums(.)))
+# Handle over counting by dividing by 2
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% select(contains(&quot;MALE_&quot;)) %&gt;% 
+    transmute(TOTAL_ALL = rowSums(.)/2))</code></pre>
+<p>It turns out that our “partial” data isn’t actually useful at all, so I need to drop it :(. This introduces a major limitation to the results from this data because I have to drop 84 companies. These 84 companies represented sectors such as Energy, Health Care, Business Services, Retailing, and others. After dropping these companies that had “partial” data but no EEOO data, I am left with 14 companies of which most are in the Technology sector.</p>
+<pre class="r"><code># Actually need to drop partial data too, it doesn&#39;t contain
+# any actual data
+div_data_tidy %&gt;% filter(data.avail == &quot;Partial&quot;) %&gt;% head()</code></pre>
+<pre><code>##   f500.2017.rank                  name data.avail
+## 1              1       Wal-Mart Stores    Partial
+## 2             38                Target    Partial
+## 3             42               MetLife    Partial
+## 4             43                 Aetna    Partial
+## 5             46 United Parcel Service    Partial
+## 6             51    Marathon Petroleum    Partial
+##                                                                                                                     data.url
+## 1                 https://cdn.corporate.walmart.com/8c/08/6bc1b69f4a94a423957d4c2162db/wm-cdireport2016-v27-reader-pages.pdf
+## 2                                        https://corporate.target.com/_media/TargetCorp/csr/pdf/2015-Workplace-Diversity.pdf
+## 3 https://www.metlife.com/content/dam/metlifecom/us/homepage/about-us/diversity-inclusion/2017EEO1DataWebsite_Disclosure.pdf
+## 4                                                https://www.aetna.com/about-us/diversity-inclusion/workplace-diversity.html
+## 5                                                                    https://sustainability.ups.com/media/UPS_Who_We_Are.pdf
+## 6                            http://www.marathonpetroleum.com/content/documents/Citizenship/2016/2016_Citizenship_Report.pdf
+##                                                            diversity.pg.url
+## 1                 http://corporate.walmart.com/our-story/working-at-walmart
+## 2 https://corporate.target.com/corporate-responsibility/diversity-inclusion
+## 3              https://www.metlife.com/about-us/global-diversity-inclusion/
+## 4                   https://www.aetna.com/about-us/diversity-inclusion.html
+## 5 https://sustainability.ups.com/committed-to-more/diversity-and-inclusion/
+## 6          http://www.marathonpetroleum.com/About_MPC/Our_Values/Diversity/
+##   data.year HISP_MALE_TOTAL HISP_FEMALE_TOTAL HISP_TOTAL WH_MALE_TOTAL
+## 1      2015               0                 0          0             0
+## 2      2015               0                 0          0             0
+## 3      2017               0                 0          0             0
+## 4      2016               0                 0          0             0
+## 5      2015               0                 0          0             0
+## 6         0               0                 0          0             0
+##   WH_FEMALE_TOTAL WH_TOTAL BLK_MALE_TOTAL BLK_FEMALE_TOTAL BLK_TOTAL
+## 1               0        0              0                0         0
+## 2               0        0              0                0         0
+## 3               0        0              0                0         0
+## 4               0        0              0                0         0
+## 5               0        0              0                0         0
+## 6               0        0              0                0         0
+##   NHOPI_MALE_TOTAL NHOPI_FEMALE_TOTAL NHOPI_TOTAL ASIAN_MALE_TOTAL
+## 1                0                  0           0                0
+## 2                0                  0           0                0
+## 3                0                  0           0                0
+## 4                0                  0           0                0
+## 5                0                  0           0                0
+## 6                0                  0           0                0
+##   ASIAN_FEMALE_TOTAL ASIAN_TOTAL AIAN_MALE_TOTAL AIAN_FEMALE_TOTAL AIAN_TOTAL
+## 1                  0           0               0                 0          0
+## 2                  0           0               0                 0          0
+## 3                  0           0               0                 0          0
+## 4                  0           0               0                 0          0
+## 5                  0           0               0                 0          0
+## 6                  0           0               0                 0          0
+##   TOMR_MALE_TOTAL TOMR_FEMALE_TOTAL TOMR_TOTAL TOTAL_MALE_ALL TOTAL_FEMALE_ALL
+## 1               0                 0          0              0                0
+## 2               0                 0          0              0                0
+## 3               0                 0          0              0                0
+## 4               0                 0          0              0                0
+## 5               0                 0          0              0                0
+## 6               0                 0          0              0                0
+##   TOTAL_ALL
+## 1         0
+## 2         0
+## 3         0
+## 4         0
+## 5         0
+## 6         0</code></pre>
+<pre class="r"><code># See which sectors the 100 companies with some level of
+# diversity data represented
+inner_join(div_data_tidy, data_f500, by = c(f500.2017.rank = &quot;Rank&quot;)) %&gt;% 
+    select(Sector) %&gt;% summary()</code></pre>
+<pre><code>##                Sector  
+##  Technology       :21  
+##  Financials       :14  
+##  Energy           :13  
+##  Health Care      : 9  
+##  Business Services: 7  
+##  Retailing        : 7  
+##  (Other)          :29</code></pre>
+<pre class="r"><code># Store the companies that have complete EEOO data to run
+# analysis on
+div_data_tidy &lt;- div_data_tidy %&gt;% filter(data.avail != &quot;Partial&quot;) %&gt;% 
+    drop_na()
+inner_join(div_data_tidy, data_f500, by = c(f500.2017.rank = &quot;Rank&quot;)) %&gt;% 
+    filter(data.avail != &quot;Partial&quot;) %&gt;% drop_na() %&gt;% select(Sector) %&gt;% 
+    summary()</code></pre>
+<pre><code>##                  Sector  
+##  Technology         :12  
+##  Financials         : 1  
+##  Retailing          : 1  
+##  Aerospace &amp; Defense: 0  
+##  Apparel            : 0  
+##  Business Services  : 0  
+##  (Other)            : 0</code></pre>
+</div>
+</div>
+<div id="data-wrangling" class="section level1">
+<h1>Data Wrangling</h1>
+<p>Now that my data is tidy, I am going to go ahead and mutate my <code>div_data_tidy</code> dataframe to include columns for percentages of each race and gender group in additon to a column for the percentage of the entire race (independent of gender) relative to the total head count for each company. I was initially going to use the <code>percent()</code> function but this doesn’t return a numeric value so I opted to just calculate it manually and multiply by 100. The approach is kinda gross but it works :)</p>
+<pre class="r"><code># Calculate percentages
+
+# HISP
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% transmute(HISP_MALE_TOTAL_PERCENT = (HISP_MALE_TOTAL/TOTAL_ALL) * 
+    100))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% transmute(HISP_FEMALE_TOTAL_PERCENT = (HISP_FEMALE_TOTAL/TOTAL_ALL) * 
+    100))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% transmute(HISP_TOTAL_PERCENT = ((HISP_MALE_TOTAL + 
+    HISP_FEMALE_TOTAL)/TOTAL_ALL) * 100))
+
+
+# WH
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% transmute(WH_MALE_TOTAL_PERCENT = (WH_MALE_TOTAL/TOTAL_ALL) * 
+    100))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% transmute(WH_FEMALE_TOTAL_PERCENT = (WH_FEMALE_TOTAL/TOTAL_ALL) * 
+    100))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% transmute(WH_TOTAL_PERCENT = ((WH_MALE_TOTAL + 
+    WH_FEMALE_TOTAL)/TOTAL_ALL) * 100))
+
+
+# BLK
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% transmute(BLK_MALE_TOTAL_PERCENT = (BLK_MALE_TOTAL/TOTAL_ALL) * 
+    100))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% transmute(BLK_FEMALE_TOTAL_PERCENT = (BLK_FEMALE_TOTAL/TOTAL_ALL) * 
+    100))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% transmute(BLK_TOTAL_PERCENT = ((BLK_MALE_TOTAL + 
+    BLK_FEMALE_TOTAL)/TOTAL_ALL) * 100))
+
+
+# NHOPI
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% transmute(NHOPI_MALE_TOTAL_PERCENT = (NHOPI_MALE_TOTAL/TOTAL_ALL) * 
+    100))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% transmute(NHOPI_FEMALE_TOTAL_PERCENT = (NHOPI_FEMALE_TOTAL/TOTAL_ALL) * 
+    100))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% transmute(NHOPI_TOTAL_PERCENT = ((NHOPI_MALE_TOTAL + 
+    NHOPI_FEMALE_TOTAL)/TOTAL_ALL) * 100))
+
+
+# ASIAN
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% transmute(ASIAN_MALE_TOTAL_PERCENT = (ASIAN_MALE_TOTAL/TOTAL_ALL) * 
+    100))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% transmute(ASIAN_FEMALE_TOTAL_PERCENT = (ASIAN_FEMALE_TOTAL/TOTAL_ALL) * 
+    100))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% transmute(ASIAN_TOTAL_PERCENT = ((ASIAN_MALE_TOTAL + 
+    ASIAN_FEMALE_TOTAL)/TOTAL_ALL) * 100))
+
+
+# AIAN
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% transmute(AIAN_MALE_TOTAL_PERCENT = (AIAN_MALE_TOTAL/TOTAL_ALL) * 
+    100))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% transmute(AIAN_FEMALE_TOTAL_PERCENT = (AIAN_FEMALE_TOTAL/TOTAL_ALL) * 
+    100))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% transmute(AIAN_TOTAL_PERCENT = ((AIAN_MALE_TOTAL + 
+    AIAN_FEMALE_TOTAL)/TOTAL_ALL) * 100))
+
+
+# TOMR
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% transmute(TOMR_MALE_TOTAL_PERCENT = (TOMR_MALE_TOTAL/TOTAL_ALL) * 
+    100))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% transmute(TOMR_FEMALE_TOTAL_PERCENT = (TOMR_FEMALE_TOTAL/TOTAL_ALL) * 
+    100))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% transmute(TOMR_TOTAL_PERCENT = ((TOMR_MALE_TOTAL + 
+    TOMR_FEMALE_TOTAL)/TOTAL_ALL) * 100))
+
+
+# Totals
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% transmute(TOTAL_MALE_TOTAL_PERCENT = (TOTAL_MALE_ALL/TOTAL_ALL) * 
+    100))
+div_data_tidy &lt;- cbind(div_data_tidy, div_data_tidy %&gt;% transmute(TOTAL_FEMALE_TOTAL_PERCENT = (TOTAL_FEMALE_ALL/TOTAL_ALL) * 
+    100))</code></pre>
+<p>There isn’t much tidying to do for the general <code>Fortune 500</code> file, I just want to drop various columns related to HQ (address, city, state, telephone, etc) and financial information I don’t plan to use for my exploratory analysis.</p>
+<pre class="r"><code># Tidy the generic Fortune 500 file Keep Keep Rank, Title,
+# Website, Sector, Hqcity, Hqstate, Hqzip,
+data_f500_tidy &lt;- data_f500 %&gt;% select(c(&quot;Rank&quot;, &quot;Title&quot;, &quot;Website&quot;, 
+    &quot;Sector&quot;, &quot;Hqcity&quot;, &quot;Hqstate&quot;, &quot;Hqzip&quot;))</code></pre>
+</div>
+<div id="join-tidied-data-sets" class="section level1">
+<h1>Join Tidied Data Sets</h1>
+<p>I am opting to use <code>inner_join()</code> because I want to select the rows that have matching values in both tables. In this case, that means the selected values that did have usable data from the tidied diversity data set.</p>
+<p>This effectively drops 486 rows/companies from the Fortune 500 that don’t have complete data. Of the companies left, 12/14 are in Technology, 1/14 is in Retailing, and 1/14 in Financials sectors. Furthermore, 10/14 are California headquarted companies, 3/14 are Washington heardquarted companies, and 1/14 Illinois headquartered company. Again, limitations of my findings because - unfortunately - the majority (~97%) of the Fortune 500 (as of 2017 when dataset was made), doesn’t report diversity data.</p>
+<pre class="r"><code># Join the two data sets now
+joined_data &lt;- inner_join(div_data_tidy, data_f500_tidy, by = c(f500.2017.rank = &quot;Rank&quot;))
+
+# Some quick insights
+nrow(data_f500_tidy) - nrow(div_data_tidy)</code></pre>
+<pre><code>## [1] 486</code></pre>
+<pre class="r"><code>joined_data %&gt;% group_by(Sector) %&gt;% summarize(n())</code></pre>
+<pre><code>## # A tibble: 3 x 2
+##   Sector     `n()`
+##   &lt;fct&gt;      &lt;int&gt;
+## 1 Financials     1
+## 2 Retailing      1
+## 3 Technology    12</code></pre>
+<pre class="r"><code>joined_data %&gt;% group_by(Hqstate) %&gt;% summarize(n())</code></pre>
+<pre><code>## # A tibble: 3 x 2
+##   Hqstate `n()`
+##   &lt;fct&gt;   &lt;int&gt;
+## 1 CA         10
+## 2 IL          1
+## 3 WA          3</code></pre>
+</div>
+<div id="summary-statistics" class="section level1">
+<h1>Summary Statistics</h1>
+<pre class="r"><code>library(knitr)
+library(kableExtra)
+
+# Create summary statistics (mean, sd, var, n, quantile, min,
+# max, n_distinct, cor, etc) for each of your numeric
+# variables both overall and after grouping by one of your
+# categorical variables
+
+options(scipen = 999)
+summary_stat_vars &lt;- c(&quot;HISP_MALE_TOTAL_PERCENT&quot;, &quot;HISP_FEMALE_TOTAL_PERCENT&quot;, 
+    &quot;HISP_TOTAL_PERCENT&quot;, &quot;WH_MALE_TOTAL_PERCENT&quot;, &quot;WH_FEMALE_TOTAL_PERCENT&quot;, 
+    &quot;WH_TOTAL_PERCENT&quot;, &quot;BLK_MALE_TOTAL_PERCENT&quot;, &quot;BLK_FEMALE_TOTAL_PERCENT&quot;, 
+    &quot;BLK_TOTAL_PERCENT&quot;, &quot;NHOPI_MALE_TOTAL_PERCENT&quot;, &quot;NHOPI_FEMALE_TOTAL_PERCENT&quot;, 
+    &quot;NHOPI_TOTAL_PERCENT&quot;, &quot;ASIAN_MALE_TOTAL_PERCENT&quot;, &quot;ASIAN_FEMALE_TOTAL_PERCENT&quot;, 
+    &quot;ASIAN_TOTAL_PERCENT&quot;, &quot;AIAN_MALE_TOTAL_PERCENT&quot;, &quot;AIAN_FEMALE_TOTAL_PERCENT&quot;, 
+    &quot;AIAN_TOTAL_PERCENT&quot;, &quot;TOMR_MALE_TOTAL_PERCENT&quot;, &quot;TOMR_FEMALE_TOTAL_PERCENT&quot;, 
+    &quot;TOMR_TOTAL_PERCENT&quot;, &quot;TOTAL_MALE_TOTAL_PERCENT&quot;, &quot;TOTAL_FEMALE_TOTAL_PERCENT&quot;)
+
+summaryDat &lt;- joined_data %&gt;% select(summary_stat_vars) %&gt;% select_if(is.numeric)
+
+# mean
+summaryDat %&gt;% summarize_all(list(Mean = mean))</code></pre>
+<pre><code>##   HISP_MALE_TOTAL_PERCENT_Mean HISP_FEMALE_TOTAL_PERCENT_Mean
+## 1                     5.097096                        3.07537
+##   HISP_TOTAL_PERCENT_Mean WH_MALE_TOTAL_PERCENT_Mean
+## 1                8.172466                   40.42404
+##   WH_FEMALE_TOTAL_PERCENT_Mean WH_TOTAL_PERCENT_Mean
+## 1                     16.61308              57.03712
+##   BLK_MALE_TOTAL_PERCENT_Mean BLK_FEMALE_TOTAL_PERCENT_Mean
+## 1                    3.310838                      2.415004
+##   BLK_TOTAL_PERCENT_Mean NHOPI_MALE_TOTAL_PERCENT_Mean
+## 1               5.725842                     0.2028277
+##   NHOPI_FEMALE_TOTAL_PERCENT_Mean NHOPI_TOTAL_PERCENT_Mean
+## 1                       0.1458524                  0.34868
+##   ASIAN_MALE_TOTAL_PERCENT_Mean ASIAN_FEMALE_TOTAL_PERCENT_Mean
+## 1                       19.1097                         7.64371
+##   ASIAN_TOTAL_PERCENT_Mean AIAN_MALE_TOTAL_PERCENT_Mean
+## 1                 26.75341                    0.2178068
+##   AIAN_FEMALE_TOTAL_PERCENT_Mean AIAN_TOTAL_PERCENT_Mean
+## 1                      0.1241657               0.3419725
+##   TOMR_MALE_TOTAL_PERCENT_Mean TOMR_FEMALE_TOTAL_PERCENT_Mean
+## 1                     1.007897                      0.6126161
+##   TOMR_TOTAL_PERCENT_Mean TOTAL_MALE_TOTAL_PERCENT_Mean
+## 1                1.620513                       69.3702
+##   TOTAL_FEMALE_TOTAL_PERCENT_Mean
+## 1                         30.6298</code></pre>
+<pre class="r"><code># sd
+summaryDat %&gt;% summarize_all(list(StdDev = sd))</code></pre>
+<pre><code>##   HISP_MALE_TOTAL_PERCENT_StdDev HISP_FEMALE_TOTAL_PERCENT_StdDev
+## 1                       3.402335                         2.638457
+##   HISP_TOTAL_PERCENT_StdDev WH_MALE_TOTAL_PERCENT_StdDev
+## 1                  5.933149                     8.513437
+##   WH_FEMALE_TOTAL_PERCENT_StdDev WH_TOTAL_PERCENT_StdDev
+## 1                       5.750861                10.32847
+##   BLK_MALE_TOTAL_PERCENT_StdDev BLK_FEMALE_TOTAL_PERCENT_StdDev
+## 1                      2.645361                        2.576213
+##   BLK_TOTAL_PERCENT_StdDev NHOPI_MALE_TOTAL_PERCENT_StdDev
+## 1                 5.168985                       0.1316188
+##   NHOPI_FEMALE_TOTAL_PERCENT_StdDev NHOPI_TOTAL_PERCENT_StdDev
+## 1                         0.1094932                   0.221572
+##   ASIAN_MALE_TOTAL_PERCENT_StdDev ASIAN_FEMALE_TOTAL_PERCENT_StdDev
+## 1                        11.28947                          3.661645
+##   ASIAN_TOTAL_PERCENT_StdDev AIAN_MALE_TOTAL_PERCENT_StdDev
+## 1                   14.02104                      0.1219933
+##   AIAN_FEMALE_TOTAL_PERCENT_StdDev AIAN_TOTAL_PERCENT_StdDev
+## 1                       0.07632291                 0.1826962
+##   TOMR_MALE_TOTAL_PERCENT_StdDev TOMR_FEMALE_TOTAL_PERCENT_StdDev
+## 1                      0.5744752                         0.425693
+##   TOMR_TOTAL_PERCENT_StdDev TOTAL_MALE_TOTAL_PERCENT_StdDev
+## 1                 0.9717797                        7.862922
+##   TOTAL_FEMALE_TOTAL_PERCENT_StdDev
+## 1                          7.862922</code></pre>
+<pre class="r"><code># variance
+summaryDat %&gt;% summarize_all(list(Variance = var))</code></pre>
+<pre><code>##   HISP_MALE_TOTAL_PERCENT_Variance HISP_FEMALE_TOTAL_PERCENT_Variance
+## 1                         11.57588                           6.961455
+##   HISP_TOTAL_PERCENT_Variance WH_MALE_TOTAL_PERCENT_Variance
+## 1                    35.20226                       72.47861
+##   WH_FEMALE_TOTAL_PERCENT_Variance WH_TOTAL_PERCENT_Variance
+## 1                          33.0724                  106.6772
+##   BLK_MALE_TOTAL_PERCENT_Variance BLK_FEMALE_TOTAL_PERCENT_Variance
+## 1                        6.997934                          6.636871
+##   BLK_TOTAL_PERCENT_Variance NHOPI_MALE_TOTAL_PERCENT_Variance
+## 1                    26.7184                         0.0173235
+##   NHOPI_FEMALE_TOTAL_PERCENT_Variance NHOPI_TOTAL_PERCENT_Variance
+## 1                          0.01198876                   0.04909416
+##   ASIAN_MALE_TOTAL_PERCENT_Variance ASIAN_FEMALE_TOTAL_PERCENT_Variance
+## 1                          127.4522                            13.40764
+##   ASIAN_TOTAL_PERCENT_Variance AIAN_MALE_TOTAL_PERCENT_Variance
+## 1                     196.5896                       0.01488235
+##   AIAN_FEMALE_TOTAL_PERCENT_Variance AIAN_TOTAL_PERCENT_Variance
+## 1                        0.005825187                  0.03337791
+##   TOMR_MALE_TOTAL_PERCENT_Variance TOMR_FEMALE_TOTAL_PERCENT_Variance
+## 1                        0.3300217                          0.1812145
+##   TOMR_TOTAL_PERCENT_Variance TOTAL_MALE_TOTAL_PERCENT_Variance
+## 1                   0.9443558                          61.82554
+##   TOTAL_FEMALE_TOTAL_PERCENT_Variance
+## 1                            61.82554</code></pre>
+<pre class="r"><code># min
+summaryDat %&gt;% summarize_all(list(Min = min))</code></pre>
+<pre><code>##   HISP_MALE_TOTAL_PERCENT_Min HISP_FEMALE_TOTAL_PERCENT_Min
+## 1                    2.155444                      1.633013
+##   HISP_TOTAL_PERCENT_Min WH_MALE_TOTAL_PERCENT_Min WH_FEMALE_TOTAL_PERCENT_Min
+## 1               4.139404                   29.1731                    6.265241
+##   WH_TOTAL_PERCENT_Min BLK_MALE_TOTAL_PERCENT_Min BLK_FEMALE_TOTAL_PERCENT_Min
+## 1             37.00945                   1.072817                    0.4195511
+##   BLK_TOTAL_PERCENT_Min NHOPI_MALE_TOTAL_PERCENT_Min
+## 1              1.515628                   0.06600781
+##   NHOPI_FEMALE_TOTAL_PERCENT_Min NHOPI_TOTAL_PERCENT_Min
+## 1                     0.02873408               0.1397474
+##   ASIAN_MALE_TOTAL_PERCENT_Min ASIAN_FEMALE_TOTAL_PERCENT_Min
+## 1                     2.449058                        2.10651
+##   ASIAN_TOTAL_PERCENT_Min AIAN_MALE_TOTAL_PERCENT_Min
+## 1                4.555568                  0.07152117
+##   AIAN_FEMALE_TOTAL_PERCENT_Min AIAN_TOTAL_PERCENT_Min
+## 1                    0.04021767              0.1329645
+##   TOMR_MALE_TOTAL_PERCENT_Min TOMR_FEMALE_TOTAL_PERCENT_Min
+## 1                           0                             0
+##   TOMR_TOTAL_PERCENT_Min TOTAL_MALE_TOTAL_PERCENT_Min
+## 1                      0                     56.51122
+##   TOTAL_FEMALE_TOTAL_PERCENT_Min
+## 1                       13.07016</code></pre>
+<pre class="r"><code># max
+summaryDat %&gt;% summarize_all(list(Max = max))</code></pre>
+<pre><code>##   HISP_MALE_TOTAL_PERCENT_Max HISP_FEMALE_TOTAL_PERCENT_Max
+## 1                    14.92213                      11.28414
+##   HISP_TOTAL_PERCENT_Max WH_MALE_TOTAL_PERCENT_Max WH_FEMALE_TOTAL_PERCENT_Max
+## 1               26.20626                  53.15896                    24.26008
+##   WH_TOTAL_PERCENT_Max BLK_MALE_TOTAL_PERCENT_Max BLK_FEMALE_TOTAL_PERCENT_Max
+## 1             77.41905                    10.4784                     10.17773
+##   BLK_TOTAL_PERCENT_Max NHOPI_MALE_TOTAL_PERCENT_Max
+## 1              20.65612                    0.5735086
+##   NHOPI_FEMALE_TOTAL_PERCENT_Max NHOPI_TOTAL_PERCENT_Max
+## 1                      0.4374781                1.010987
+##   ASIAN_MALE_TOTAL_PERCENT_Max ASIAN_FEMALE_TOTAL_PERCENT_Max
+## 1                     43.26198                       11.52763
+##   ASIAN_TOTAL_PERCENT_Max AIAN_MALE_TOTAL_PERCENT_Max
+## 1                53.83427                   0.4376073
+##   AIAN_FEMALE_TOTAL_PERCENT_Max AIAN_TOTAL_PERCENT_Max
+## 1                     0.2736726              0.6114973
+##   TOMR_MALE_TOTAL_PERCENT_Max TOMR_FEMALE_TOTAL_PERCENT_Max
+## 1                     2.08786                      1.667955
+##   TOMR_TOTAL_PERCENT_Max TOTAL_MALE_TOTAL_PERCENT_Max
+## 1               3.755816                     86.92984
+##   TOTAL_FEMALE_TOTAL_PERCENT_Max
+## 1                       43.48878</code></pre>
+</div>
+<div id="visualizations" class="section level1">
+<h1>Visualizations</h1>
+<p>I am making two stacked bar graph GGPlots, one for the distribution of races by state and one for the distribution of races by sector. I tried using <code>stat=&quot;summary&quot;</code> but it broke my stacked bar graph and put the bars side to side which defeats the purpose of the graph I’m trying to depict.</p>
+<pre class="r"><code>library(ggplot2)
+library(scales)
+library(RColorBrewer)
+
+# GGPlot1
+
+# Get diversity data by company and state
+race_stats_by_company_and_state &lt;- joined_data %&gt;% select(c(&quot;Hqstate&quot;, 
+    &quot;HISP_TOTAL&quot;, &quot;WH_TOTAL&quot;, &quot;BLK_TOTAL&quot;, &quot;NHOPI_TOTAL&quot;, &quot;ASIAN_TOTAL&quot;, 
+    &quot;AIAN_TOTAL&quot;, &quot;TOMR_TOTAL&quot;)) %&gt;% arrange(Hqstate)
+
+# Collapse rows into summaries by individual state instead of
+# companies
+race_stats_by_state &lt;- race_stats_by_company_and_state %&gt;% group_by(Hqstate) %&gt;% 
+    summarize_each(funs(sum))
+
+# Plot the distribution of Races by state
+
+pivoted_race &lt;- race_stats_by_state %&gt;% pivot_longer(-Hqstate, 
+    names_to = &quot;Race&quot;, values_to = &quot;Count&quot;)
+
+ggplot1 &lt;- ggplot(data = pivoted_race, aes(x = Hqstate, y = Count, 
+    fill = Race)) + geom_bar(position = &quot;fill&quot;, stat = &quot;identity&quot;) + 
+    scale_y_continuous(name = &quot;EEOO Races&quot;, labels = percent, 
+        breaks = scales::pretty_breaks(n = 10)) + scale_x_discrete(name = &quot;Company&#39;s HQ State&quot;, 
+    labels = c(&quot;California&quot;, &quot;Illinois&quot;, &quot;Washington&quot;)) + labs(x = &quot;State&quot;, 
+    y = &quot;Percentage&quot;) + scale_fill_manual(&quot;Race Legend&quot;, labels = c(&quot;Native American&quot;, 
+    &quot;Asian&quot;, &quot;Black&quot;, &quot;Hispanic&quot;, &quot;Native Hawaiian&quot;, &quot;Multiracial&quot;, 
+    &quot;White&quot;), values = brewer.pal(n = 7, name = &quot;YlOrRd&quot;)) + 
+    ggtitle(&quot;Distribution of Races By State Amongst Fortune 500&quot;)
+ggplot1</code></pre>
+<p><img src="/project1_files/figure-html/unnamed-chunk-11-1.png" width="768" style="display: block; margin: auto;" />
+Based on this first stacked bar graph GGPlot, I can see that Illinois has a significantly greater distribution of a white workforce than either California or Washington that are roughly on par. According to the plotted data, California’s second largest racial group in the workforce is Asians whereas it’s Hispanics in Illinois (althoug it’s closely followed by African Americans) and Washington.</p>
+<pre class="r"><code># GGPlot2 Plot the distribution of Races by Industry
+
+# Get diversity data by company and state
+race_stats_by_company_and_sector &lt;- joined_data %&gt;% select(c(&quot;Sector&quot;, 
+    &quot;HISP_TOTAL&quot;, &quot;WH_TOTAL&quot;, &quot;BLK_TOTAL&quot;, &quot;NHOPI_TOTAL&quot;, &quot;ASIAN_TOTAL&quot;, 
+    &quot;AIAN_TOTAL&quot;, &quot;TOMR_TOTAL&quot;)) %&gt;% arrange(Sector)
+
+# Collapse rows into summaries by individual state instead of
+# companies
+race_stats_by_sector &lt;- race_stats_by_company_and_sector %&gt;% 
+    group_by(Sector) %&gt;% summarize_each(funs(sum))
+
+# Plot the distribution of Races by state
+
+pivoted_sector &lt;- race_stats_by_sector %&gt;% pivot_longer(-Sector, 
+    names_to = &quot;Race&quot;, values_to = &quot;Count&quot;)
+
+ggplot2 &lt;- ggplot(data = pivoted_sector, aes(x = Sector, y = Count, 
+    fill = Race)) + geom_bar(position = &quot;fill&quot;, stat = &quot;identity&quot;) + 
+    scale_y_continuous(name = &quot;EEOO Races&quot;, labels = percent, 
+        breaks = scales::pretty_breaks(n = 10)) + labs(x = &quot;Sector&quot;, 
+    y = &quot;Percentage&quot;) + scale_fill_manual(&quot;Race Legend&quot;, labels = c(&quot;Native American&quot;, 
+    &quot;Asian&quot;, &quot;Black&quot;, &quot;Hispanic&quot;, &quot;Native Hawaiian&quot;, &quot;Multiracial&quot;, 
+    &quot;White&quot;), values = brewer.pal(n = 7, name = &quot;YlOrRd&quot;)) + 
+    ggtitle(&quot;Distribution of Races By Sector Amongst Fortune 500&quot;)  #+ 
+geom_text(aes(label = percent(Count/sum(Count))), size = 2, position = position_fill(vjust = 0.5))</code></pre>
+<pre><code>## mapping: label = ~percent(Count/sum(Count)) 
+## geom_text: parse = FALSE, check_overlap = FALSE, na.rm = FALSE
+## stat_identity: na.rm = FALSE
+## position_fill</code></pre>
+<pre class="r"><code>ggplot2</code></pre>
+<p><img src="/project1_files/figure-html/unnamed-chunk-12-1.png" width="768" style="display: block; margin: auto;" />
+On my second stacked bar graph GGPlot, I can see an interesting trend regarding various sectors of industry. Financials is over 75% white whereas the cumulative racial distribution of Retailing and Technology is closer to ~55%. Retailing and Financial’s second largest group is Hispanic whereas it’s Asian for technology (no surprise there).</p>
+</div>
+<div id="correlation-heatmap" class="section level1">
+<h1>Correlation Heatmap</h1>
+<pre class="r"><code># Correlation heatmap Source:
+# http://www.sthda.com/english/wiki/ggplot2-quick-correlation-matrix-heatmap-r-software-and-data-visualization
+all &lt;- joined_data %&gt;% select(c(&quot;HISP_TOTAL&quot;, &quot;WH_TOTAL&quot;, &quot;BLK_TOTAL&quot;, 
+    &quot;NHOPI_TOTAL&quot;, &quot;ASIAN_TOTAL&quot;, &quot;AIAN_TOTAL&quot;, &quot;TOMR_TOTAL&quot;))
+
+as_percent &lt;- joined_data %&gt;% select(c(&quot;HISP_TOTAL&quot;, &quot;WH_TOTAL&quot;, 
+    &quot;BLK_TOTAL&quot;, &quot;NHOPI_TOTAL&quot;, &quot;ASIAN_TOTAL&quot;, &quot;AIAN_TOTAL&quot;, 
+    &quot;TOMR_TOTAL&quot;)) %&gt;% mutate(Hispanic = HISP_TOTAL/rowSums(all) * 
+    100) %&gt;% mutate(White = WH_TOTAL/rowSums(all) * 100) %&gt;% 
+    mutate(Black = BLK_TOTAL/rowSums(all) * 100) %&gt;% mutate(Hawaiian = NHOPI_TOTAL/rowSums(all) * 
+    100) %&gt;% mutate(Asian = ASIAN_TOTAL/rowSums(all) * 100) %&gt;% 
+    mutate(`Native American` = AIAN_TOTAL/rowSums(all) * 100) %&gt;% 
+    mutate(Multiracial = TOMR_TOTAL/rowSums(all) * 100) %&gt;% select(c(&quot;Hispanic&quot;, 
+    &quot;White&quot;, &quot;Black&quot;, &quot;Hawaiian&quot;, &quot;Asian&quot;, &quot;Asian&quot;, &quot;Native American&quot;, 
+    &quot;Multiracial&quot;))
+
+cormat &lt;- round(cor(as_percent), 2)
+
+library(reshape2)
+melted_cormat &lt;- melt(cormat)
+
+library(ggplot2)
+
+# Get lower triangle of the correlation matrix
+get_lower_tri &lt;- function(cormat) {
+    cormat[upper.tri(cormat)] &lt;- NA
+    return(cormat)
+}
+# Get upper triangle of the correlation matrix
+get_upper_tri &lt;- function(cormat) {
+    cormat[lower.tri(cormat)] &lt;- NA
+    return(cormat)
+}
+
+upper_tri &lt;- get_upper_tri(cormat)
+upper_tri</code></pre>
+<pre><code>##                 Hispanic White Black Hawaiian Asian Native American Multiracial
+## Hispanic               1 -0.09  0.62     0.90 -0.63            0.63        0.30
+## White                 NA  1.00 -0.02    -0.31 -0.65            0.06       -0.60
+## Black                 NA    NA  1.00     0.43 -0.67            0.69        0.48
+## Hawaiian              NA    NA    NA     1.00 -0.36            0.40        0.30
+## Asian                 NA    NA    NA       NA  1.00           -0.59        0.06
+## Native American       NA    NA    NA       NA    NA            1.00        0.17
+## Multiracial           NA    NA    NA       NA    NA              NA        1.00</code></pre>
+<pre class="r"><code># Melt the correlation matrix
+melted_cormat &lt;- melt(upper_tri, na.rm = TRUE)
+
+heatmap &lt;- ggplot(data = melted_cormat, aes(Var2, Var1, fill = value)) + 
+    geom_tile(color = &quot;white&quot;) + scale_fill_gradient2(low = &quot;blue&quot;, 
+    high = &quot;red&quot;, mid = &quot;white&quot;, midpoint = 0, limit = c(-1, 
+        1), space = &quot;Lab&quot;, name = &quot;Pearson\nCorrelation&quot;) + theme_minimal() + 
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, size = 12, 
+        hjust = 1)) + coord_fixed()
+
+heatmap &lt;- heatmap + geom_text(aes(Var2, Var1, label = value), 
+    color = &quot;black&quot;, size = 4) + theme(panel.grid.major = element_blank(), 
+    panel.border = element_blank(), panel.background = element_blank(), 
+    axis.ticks = element_blank(), legend.justification = c(1, 
+        0), legend.position = c(0.6, 0.7), legend.direction = &quot;horizontal&quot;) + 
+    guides(fill = guide_colorbar(barwidth = 7, barheight = 1, 
+        title.position = &quot;top&quot;, title.hjust = 0.5)) + ggtitle(&quot;Correlation Heatmap of Races Amongst Fortune 500&quot;)
+
+heatmap</code></pre>
+<p><img src="/project1_files/figure-html/unnamed-chunk-13-1.png" width="768" style="display: block; margin: auto;" /></p>
+</div>
+<div id="principal-component-analysis" class="section level1">
+<h1>Principal Component Analysis</h1>
+<pre class="r"><code># Principal Component Analysis (PCA) code from WS11 for SDS
+# 348 by Dr. Woodward
+library(dplyr)
+library(ggplot2)
+
+# Tidy Names
+all &lt;- joined_data %&gt;% select(c(&quot;name&quot;, &quot;HISP_TOTAL&quot;, &quot;WH_TOTAL&quot;, 
+    &quot;BLK_TOTAL&quot;, &quot;NHOPI_TOTAL&quot;, &quot;ASIAN_TOTAL&quot;, &quot;AIAN_TOTAL&quot;, 
+    &quot;TOMR_TOTAL&quot;)) %&gt;% rename(Hispanic = HISP_TOTAL) %&gt;% rename(White = WH_TOTAL) %&gt;% 
+    rename(Black = BLK_TOTAL) %&gt;% rename(Hawaiian = NHOPI_TOTAL) %&gt;% 
+    rename(Asian = ASIAN_TOTAL) %&gt;% rename(`Native American` = AIAN_TOTAL) %&gt;% 
+    rename(Multiracial = TOMR_TOTAL)
+
+all_nums &lt;- all %&gt;% select_if(is.numeric) %&gt;% scale()
+
+rownames(all_nums) &lt;- all$name
+all_pca &lt;- princomp(all_nums)
+names(all_pca)</code></pre>
+<pre><code>## [1] &quot;sdev&quot;     &quot;loadings&quot; &quot;center&quot;   &quot;scale&quot;    &quot;n.obs&quot;    &quot;scores&quot;   &quot;call&quot;</code></pre>
+<pre class="r"><code>summary(all_pca, loadings = T)</code></pre>
+<pre><code>## Importance of components:
+##                           Comp.1    Comp.2    Comp.3     Comp.4      Comp.5
+## Standard deviation     2.2868939 0.8675099 0.6182863 0.32066428 0.165438111
+## Proportion of Variance 0.8045975 0.1157805 0.0588120 0.01581932 0.004210734
+## Cumulative Proportion  0.8045975 0.9203780 0.9791900 0.99500935 0.999220083
+##                              Comp.6       Comp.7
+## Standard deviation     0.0652722544 0.0284428234
+## Proportion of Variance 0.0006554565 0.0001244606
+## Cumulative Proportion  0.9998755394 1.0000000000
+## 
+## Loadings:
+##                 Comp.1 Comp.2 Comp.3 Comp.4 Comp.5 Comp.6 Comp.7
+## Hispanic         0.382  0.418  0.279  0.134                0.760
+## White            0.401         0.169 -0.829  0.325        -0.117
+## Black            0.387        -0.595                0.691       
+## Hawaiian         0.371  0.447  0.339  0.345  0.104  0.147 -0.629
+## Asian            0.271 -0.774  0.473  0.293         0.112       
+## Native American  0.416               -0.139 -0.870 -0.209       
+## Multiracial      0.398 -0.117 -0.446  0.254  0.341 -0.667</code></pre>
+<pre class="r"><code>eigval &lt;- all_pca$sdev^2  #square to convert SDs to eigenvalues
+varprop = round(eigval/sum(eigval), 2)  #proportion of var explained by each PC
+
+ggplot() + geom_bar(aes(y = varprop, x = 1:7), stat = &quot;identity&quot;) + 
+    xlab(&quot;&quot;) + geom_path(aes(y = varprop, x = 1:7)) + geom_text(aes(x = 1:7, 
+    y = varprop, label = round(varprop, 2)), vjust = 1, col = &quot;white&quot;, 
+    size = 5) + scale_y_continuous(breaks = seq(0, 0.6, 0.2), 
+    labels = scales::percent) + scale_x_continuous(breaks = 1:10)</code></pre>
+<p><img src="/project1_files/figure-html/unnamed-chunk-14-1.png" width="768" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>round(cumsum(eigval)/sum(eigval), 2)  #cumulative proportion of variance</code></pre>
+<pre><code>## Comp.1 Comp.2 Comp.3 Comp.4 Comp.5 Comp.6 Comp.7 
+##   0.80   0.92   0.98   1.00   1.00   1.00   1.00</code></pre>
+<pre class="r"><code>eigval  #eigenvalues</code></pre>
+<pre><code>##       Comp.1       Comp.2       Comp.3       Comp.4       Comp.5       Comp.6 
+## 5.2298837748 0.7525734079 0.3822780071 0.1028255801 0.0273697687 0.0042604672 
+##       Comp.7 
+## 0.0008089942</code></pre>
+<pre class="r"><code>eigen(cor(all_nums))</code></pre>
+<pre><code>## eigen() decomposition
+## $values
+## [1] 5.6321825267 0.8104636701 0.4116840076 0.1107352401 0.0294751355
+## [6] 0.0045881954 0.0008712245
+## 
+## $vectors
+##           [,1]        [,2]        [,3]        [,4]        [,5]         [,6]
+## [1,] 0.3824809  0.41772570 -0.27864473  0.13408080  0.07791106 -0.005279445
+## [2,] 0.4010583 -0.06157417 -0.16921970 -0.82888214  0.32548441  0.003823905
+## [3,] 0.3872166 -0.09287509  0.59478061  0.07735031  0.03830508 -0.691036955
+## [4,] 0.3713956  0.44696825 -0.33887662  0.34488500  0.10419695 -0.146508423
+## [5,] 0.2707015 -0.77402153 -0.47289825  0.29348305  0.04400482 -0.111612757
+## [6,] 0.4158562 -0.02134473  0.04856402 -0.13869578 -0.87012701  0.209080700
+## [7,] 0.3984640 -0.11722853  0.44623901  0.25432103  0.34147921  0.666924709
+##             [,7]
+## [1,]  0.75993096
+## [2,] -0.11715490
+## [3,]  0.05187573
+## [4,] -0.62942829
+## [5,]  0.05875766
+## [6,] -0.06463205
+## [7,] -0.04773714</code></pre>
+<pre class="r"><code># Run princomp() to get further insights into eigenvectors
+# and dimensions
+pca_1 &lt;- princomp(all_nums)
+summary(pca_1, loadings = TRUE)</code></pre>
+<pre><code>## Importance of components:
+##                           Comp.1    Comp.2    Comp.3     Comp.4      Comp.5
+## Standard deviation     2.2868939 0.8675099 0.6182863 0.32066428 0.165438111
+## Proportion of Variance 0.8045975 0.1157805 0.0588120 0.01581932 0.004210734
+## Cumulative Proportion  0.8045975 0.9203780 0.9791900 0.99500935 0.999220083
+##                              Comp.6       Comp.7
+## Standard deviation     0.0652722544 0.0284428234
+## Proportion of Variance 0.0006554565 0.0001244606
+## Cumulative Proportion  0.9998755394 1.0000000000
+## 
+## Loadings:
+##                 Comp.1 Comp.2 Comp.3 Comp.4 Comp.5 Comp.6 Comp.7
+## Hispanic         0.382  0.418  0.279  0.134                0.760
+## White            0.401         0.169 -0.829  0.325        -0.117
+## Black            0.387        -0.595                0.691       
+## Hawaiian         0.371  0.447  0.339  0.345  0.104  0.147 -0.629
+## Asian            0.271 -0.774  0.473  0.293         0.112       
+## Native American  0.416               -0.139 -0.870 -0.209       
+## Multiracial      0.398 -0.117 -0.446  0.254  0.341 -0.667</code></pre>
+<pre class="r"><code>alldf &lt;- data.frame(PC1 = all_pca$scores[, 1], PC2 = all_pca$scores[, 
+    2])
+ggplot(alldf, aes(PC1, PC2)) + geom_point()</code></pre>
+<p><img src="/project1_files/figure-html/unnamed-chunk-14-2.png" width="768" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>ggplot(alldf, aes(PC1, PC2)) + geom_point() + stat_ellipse(data = alldf[alldf$PC1 &lt; 
+    max(alldf$PC1), ], aes(PC1, PC2), color = &quot;blue&quot;) + stat_ellipse(data = alldf[alldf$PC1 &gt; 
+    min(alldf$PC1), ], aes(PC1, PC2), color = &quot;blue&quot;) + stat_ellipse(data = alldf[alldf$PC2 &lt; 
+    max(alldf$PC2), ], aes(PC1, PC2), color = &quot;red&quot;) + stat_ellipse(data = alldf[alldf$PC2 &gt; 
+    min(alldf$PC2), ], aes(PC1, PC2), color = &quot;red&quot;)</code></pre>
+<p><img src="/project1_files/figure-html/unnamed-chunk-14-3.png" width="768" style="display: block; margin: auto;" /></p>
+<pre class="r"><code># Full plot of items plotted
+install.packages(&quot;factoextra&quot;)</code></pre>
+<pre><code>## 
+## The downloaded binary packages are in
+##  /var/folders/jb/3wk4blz534v79jdbz9rv9mpw0000gn/T//RtmpKO3GB4/downloaded_packages</code></pre>
+<pre class="r"><code>library(factoextra)
+fviz_pca_biplot(all_pca, labelsize = 2, pointsize = 1)</code></pre>
+<p><img src="/project1_files/figure-html/unnamed-chunk-14-4.png" width="768" style="display: block; margin: auto;" />
+On the x-axis, Dim1 represents the size of the company (head count wise) whereas Dim2 represents the influence of races. We see the arrow corresponding to Asian showing up more skewed towards tech-sector companies like Intel, Microsoft, HP, Apple, Alphabet, etc which aligns with demographic data. Meanwhile, larger companies like Costco or Amazon with a high amount of employees have greater racial workforce diversity. We also see that the arrows for Native American, White, Black, and Multiracial are closely coupled near 0 whereas Asian and the Hawaiian, Hispanic pairings are more spread apart from the main arrow grouping because they have a greater influence on the racial makeup of a company. This suggests that Asian or Hawaiian, Hispanic demographics pull the demographics of a company in either direction. This needs to be taken with a grain of salt though because the data is skewed towards tech companies since 12/14 companies reporting data were in the Technology sector.</p>
+<p>Note that the <code>echo = FALSE</code> parameter was added to the code chunk to prevent printing of the R code that generated the plot.</p>
+</div>

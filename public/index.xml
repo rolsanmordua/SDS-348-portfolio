@@ -1,24 +1,15 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
-    <title>Santiag&#39;s SDS 348 Portfolio</title>
+    <title>Santiago&#39;s SDS 348 Portfolio</title>
     <link>/</link>
-    <description>Recent content on Santiag&#39;s SDS 348 Portfolio</description>
+    <description>Recent content on Santiago&#39;s SDS 348 Portfolio</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-US</language>
-    <lastBuildDate>Sun, 02 Oct 2016 22:55:05 -0400</lastBuildDate>
+    <lastBuildDate>Thu, 23 Jul 2015 21:13:14 -0500</lastBuildDate>
     
 	<atom:link href="/index.xml" rel="self" type="application/rss+xml" />
     
-    
-    <item>
-      <title>Projects</title>
-      <link>/projects/</link>
-      <pubDate>Sun, 02 Oct 2016 22:55:05 -0400</pubDate>
-      
-      <guid>/projects/</guid>
-      <description></description>
-    </item>
     
     <item>
       <title>Hello R Markdown</title>
@@ -74,6 +65,42 @@ Follow the following steps:
       <description>Move static content to static Jekyll has a rule that any directory not starting with _ will be copied as-is to the _site output. Hugo keeps all static content under static. You should therefore move it all there. With Jekyll, something that looked like
 ▾ &amp;lt;root&amp;gt;/ ▾ images/ logo.png  should become
 ▾ &amp;lt;root&amp;gt;/ ▾ static/ ▾ images/ logo.png  Additionally, you&amp;rsquo;ll want any files that should reside at the root (such as CNAME) to be moved to static.</description>
+    </item>
+    
+    <item>
+      <title>Project 2: Modeling, Testing, and Predicting</title>
+      <link>/project2/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>/project2/</guid>
+      <description>Introduction For Project 2: “Modeling, Testing, and Predicting”, I am continuing with my diversity research theme from Project 1: “Exploratory Data Analysis”. The dataset I selected from Kaggle has demographics for 25 Silicon Valley tech companies of various sizes (ranging from 100 professionals to 36,0000). The dataset has categorical variables like company (name), gender (male, female), and job category (e.g. professional, executive, service, etc). There is one numeric variable for the count of people by ethnicity and job category by gender but I plan to tidy the dataset.</description>
+    </item>
+    
+    <item>
+      <title>Projects</title>
+      <link>/projects/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>/projects/</guid>
+      <description>Projects Here are some projects I have recently completed:
+  Exploratory Data Analysis with Tidyverse Tools
+  Modeling, Testing, and Classification
+  </description>
+    </item>
+    
+    <item>
+      <title>| Diversity Across the Fortune 500  
+| SDS 348 w/ Dr. Woodward, March 2020  
+| R. Santiago Moreno, rsm2785
+</title>
+      <link>/project1/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>/project1/</guid>
+      <description>Data Set Attributions Both of my datasets were acquired from Kaggle.
+My Fortune 500 Diversity dataset was acquired from: https://www.kaggle.com/fortune-inc/f500-diversity, uploaded by user Fortune
+My general Fortune 500 dataset was acquired from: https://www.kaggle.com/vineetjaiswal/fortune500-2017, uploaded by user Vineet
+ Introduction I chose two datasets from Kaggle on the Fortune 500 companies from 2017. One data set is generic information on the Fortune 500 with numerical and categorical variables such as Fortune 500 rank, company name, website, sector (as in industry), HQ location, CEO, revenues, profits, and other financial data.</description>
     </item>
     
   </channel>

@@ -1,0 +1,914 @@
+---
+title: 'Project 2: Modeling, Testing, and Predicting'
+author: "R. Santiago Moreno"
+date: 'May 1st, 2020'
+output:
+  pdf_document: default
+  word_document: default 
+  html_document:
+    toc: yes
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+---
+
+
+
+<div id="introduction" class="section level1">
+<h1>Introduction</h1>
+<p>For <em>Project 2: “Modeling, Testing, and Predicting”</em>, I am continuing with my diversity research theme from <em>Project 1: “Exploratory Data Analysis”</em>. The dataset I selected from <em>Kaggle</em> has demographics for 25 Silicon Valley tech companies of various sizes (ranging from 100 professionals to 36,0000). The dataset has categorical variables like company (name), gender (male, female), and job category (e.g. professional, executive, service, etc). There is one numeric variable for the count of people by ethnicity and job category by gender but I plan to tidy the dataset. After tidying I will have company name, company size (categorical), gender (categorical), and percent overall for each EEO ethnicity reported by gender (numerical).</p>
+<p>For this project, I am interested in zooming in to focus on tech companies in a major tech-hub, Silicon Valley. I am personally interested in this topic because I will be graduating in the next 12-18 months and will be recruiting for full-time employment through the end of 2020. I have interviewed with a variety of companies for internships and have noticed at recruiting events some companies are more diverse compared to others.</p>
+<p>Personally, I have noticed that samller companies and startups tend to be less diverse but I want to test if my observations are biased towards my smaller sample size and my unique experiences. I am personally interning at a large, established tech-company this summer (50,000 employees at HQ) and a smaller, younger start-up in the Fall (3,000 employees worldwide) and noticed a great disparity in diversity between the two companies alone. This resonates with me because I’m a hispanic Computer Science major and an underrepresented minority in Computer Science. I’d like to work at a diverse company with representation from a variety of ethic and racial groups.</p>
+<p>My hypothesis before embarking on this project is that smaller companies will feature more homogeneity/less diversity than larger, more-established companies because the vast majority of time and resources is dedicated towards making their product succeed to secure funding and users/growth. Meanwhile, larger tech companies have the economic and human resources to promote diversity.</p>
+</div>
+<div id="attributions" class="section level1">
+<h1>Attributions</h1>
+<div id="dataset-attribution" class="section level3">
+<h3>Dataset Attribution</h3>
+<p>My dataset was acquired from <em>Kaggle</em>.</p>
+<p>The <code>Silcion Valley Diversity Data</code> dataset was acquired from: <a href="https://www.kaggle.com/rtatman/silicon-valley-diversity-data">https://www.kaggle.com/rtatman/silicon-valley-diversity-data</a>, uploaded by user <code>Rachael Tatman</code></p>
+</div>
+<div id="code-attributions" class="section level3">
+<h3>Code Attributions</h3>
+<p>I am borrowing the <code>class_diag()</code> function and the K-fold Cross Validation code from Lab 11 provided by Dr. Woodward for my project. I also used code from the Bootstrapped SEs worksheet</p>
+<div style="page-break-after: always;"></div>
+</div>
+<div id="imports" class="section level2">
+<h2>Imports</h2>
+<pre class="r"><code>options(repos = list(CRAN=&quot;http://cran.rstudio.com/&quot;))
+# Tidying imports
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+
+# For MANOVA Assumptions
+library(mvtnorm)
+library(ggExtra)
+
+# Plot with ggplot
+library(ggplot2)
+#install.packages(&quot;devtools&quot;)
+#devtools::install_github(&quot;lionel-/ggstance&quot;)
+library(ggstance)
+
+# Imports to check Assumptions for Linear Regression
+library(lmtest)
+library(sandwich)
+
+# LASSO Regression
+library(glmnet)</code></pre>
+</div>
+</div>
+<div id="tidy-data" class="section level1">
+<h1>Tidy Data</h1>
+<div id="reshape-data" class="section level3">
+<h3>Reshape Data</h3>
+<pre class="r"><code># Read in data sets from Kaggle
+divDat &lt;- read.csv(&quot;Reveal_EEO1_for_2016.csv&quot;, strip.white = TRUE,
+                   stringsAsFactors = FALSE)
+# divDat %&gt;% head() # data after import
+
+# Pivot wider, move EEO data row groups to columns
+divDat &lt;- divDat %&gt;% pivot_wider(names_from = race, values_from = count)
+
+# Drop job_category that isn&#39;t &quot;Professionals&quot;
+divDat &lt;- divDat %&gt;% filter(job_category == &quot;Professionals&quot;)
+
+# Drop total sum rows, I will handle that myself
+divDat &lt;- divDat %&gt;% filter(gender != &quot;&quot;) 
+
+# Ok, my numeric data was imported as Strings and then I could only get it 
+# to be char type so I am just partioning my dataset, casting it, and rejoining it 
+divDat1 &lt;- as.data.frame(divDat[, 1:4])
+divDat2 &lt;- sapply(divDat[, 5:11], as.numeric)
+# Bind to original dataset dataframe now
+divDatRawCt &lt;- cbind(divDat1, divDat2)
+
+# Calculate row-wise totals for gender
+divDatRawCt &lt;- divDatRawCt %&gt;% 
+  mutate(&quot;Overall_Gender_totals&quot; = rowSums(.[5:11]))
+
+# Calculate sum for males and females
+temp &lt;- divDatRawCt %&gt;% group_by(company, gender) %&gt;%
+  summarize(sum = sum(Overall_Gender_totals)) %&gt;%
+  pivot_wider(names_from = gender, values_from = sum) 
+temp &lt;- temp %&gt;% mutate(&quot;Overall_totals&quot; = male + female) 
+temp &lt;- temp %&gt;% select(&quot;Overall_totals&quot;)
+
+# Add overall totals to original dataset
+divDatRawCt &lt;- divDatRawCt %&gt;% right_join(temp)</code></pre>
+</div>
+<div id="transform-data" class="section level3">
+<h3>Transform Data</h3>
+<pre class="r"><code># Calculate percentages for entire dataset with rounding to hundredths
+# this is significantly more efficient than what I did for Project 1 :)
+ethnPctDat = lapply(divDatRawCt[,5:12], function(x) {
+  round((x / divDatRawCt[13]) * 100, 3)
+})
+
+# Save percent data as dataframe to bind back with categorical data
+ethnPctDat &lt;- as.data.frame(ethnPctDat)
+# Copy over column names from origial raw count dataframe
+divDat2 &lt;- setNames(ethnPctDat, as.vector(names(divDat[, 5:12])))
+# Bind to original dataset dataframe now
+divDatPercent &lt;- cbind(divDat1, divDat2)
+  # divDatPercent %&gt;% head() # Data after computing percents
+
+# Determine categorical grouping for company sizes by looking at fivenum
+fivenum(divDatRawCt$Overall_totals)</code></pre>
+<pre><code>## [1]   129  1132  3882  8111 36160</code></pre>
+<pre class="r"><code># Small: 0 - 2000, Medium : 2000 - 10,000, Large: 10,000 + 
+divDatRawCt$company_size &lt;- &quot;N/A&quot;
+divDatRawCt$company_size[divDatRawCt$Overall_totals &lt;= 2000] &lt;- &quot;small&quot;
+divDatRawCt$company_size[divDatRawCt$Overall_totals &gt; 2000 &amp;
+                           divDatRawCt$Overall_totals &lt;= 10000] &lt;- &quot;medium&quot;
+divDatRawCt$company_size[divDatRawCt$Overall_totals &gt; 10000] &lt;- &quot;large&quot;
+
+# Add company_size column to working dataframe `divDatPercent`
+divDatPercent$company_size &lt;- divDatRawCt$company_size
+  # divDatPercent %&gt;% head()
+  # divDatPercent %&gt;% summary()
+
+# Drop year (all the same) and job_category (only Professionals)
+divDatPercent$year &lt;- NULL
+divDatPercent$job_category &lt;- NULL
+
+# Rearrange order of variables
+  # names(divDatPercent)
+# Move company_size closer to categorical variabes
+divDatPercent &lt;- divDatPercent[c(&quot;company&quot;, &quot;company_size&quot;, &quot;gender&quot;,
+  &quot;Hispanic_or_Latino&quot;, &quot;White&quot;, &quot;Black_or_African_American&quot;,
+  &quot;Native_Hawaiian_or_Pacific_Islander&quot;, &quot;Asian&quot;, 
+  &quot;American_Indian_Alaskan_Native&quot;, &quot;Two_or_more_races&quot;,
+  &quot;Overall_totals&quot;)]
+
+divDatPercentFem &lt;- divDatPercent %&gt;% filter(gender == &quot;female&quot;)
+divDatPercentM &lt;- divDatPercent %&gt;% filter(gender == &quot;male&quot;)</code></pre>
+<p>I made a couple changes to my data to simplify my analyses: reshaping my data, dropping information I don’t intend to use (e.g. <code>year</code> since all data is from 2016), and dropping job-categories since I am focusing on <code>Professionals</code> only. I added a categorical variable for the size of company using <code>fivenum()</code> summary to determine cutoffs for <em>small</em>, <em>medium</em>, and <em>large</em>. Lastly, I converted all my data to percents so it’s easier to compare between companies and analyze.
+</p>
+</div>
+</div>
+<div id="manova" class="section level1">
+<h1>MANOVA</h1>
+<div id="manova-across-ethnicities" class="section level2">
+<h2>MANOVA: Across Ethnicities</h2>
+<pre class="r"><code>manovaEthnicity &lt;- manova(cbind(Hispanic_or_Latino, White, Black_or_African_American,
+  Native_Hawaiian_or_Pacific_Islander, Asian, 
+  American_Indian_Alaskan_Native, Two_or_more_races) ~ company_size,
+  data = divDatPercent)
+
+summary(manovaEthnicity, test=&quot;Pillai&quot;)</code></pre>
+<pre><code>##              Df  Pillai approx F num Df den Df  Pr(&gt;F)  
+## company_size  2 0.46307   1.8078     14     84 0.05056 .
+## Residuals    47                                         
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
+<pre class="r"><code># Get univariate ANOVAs from MANOVA object
+summary.aov(manovaEthnicity)</code></pre>
+<pre><code>##  Response Hispanic_or_Latino :
+##              Df Sum Sq Mean Sq F value Pr(&gt;F)
+## company_size  2  4.862  2.4308  1.5279 0.2276
+## Residuals    47 74.772  1.5909               
+## 
+##  Response White :
+##              Df Sum Sq Mean Sq F value Pr(&gt;F)
+## company_size  2   32.4  16.212   0.094 0.9104
+## Residuals    47 8103.4 172.414               
+## 
+##  Response Black_or_African_American :
+##              Df  Sum Sq Mean Sq F value  Pr(&gt;F)  
+## company_size  2  2.7396 1.36979  3.4196 0.04107 *
+## Residuals    47 18.8269 0.40057                  
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+##  Response Native_Hawaiian_or_Pacific_Islander :
+##              Df  Sum Sq  Mean Sq F value  Pr(&gt;F)  
+## company_size  2 0.05434 0.027168  2.7109 0.07687 .
+## Residuals    47 0.47103 0.010022                  
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+##  Response Asian :
+##              Df Sum Sq Mean Sq F value Pr(&gt;F)
+## company_size  2  103.2  51.619  0.6394 0.5322
+## Residuals    47 3794.5  80.734               
+## 
+##  Response American_Indian_Alaskan_Native :
+##              Df  Sum Sq   Mean Sq F value Pr(&gt;F)
+## company_size  2 0.00244 0.0012194  0.0762 0.9267
+## Residuals    47 0.75203 0.0160006               
+## 
+##  Response Two_or_more_races :
+##              Df  Sum Sq Mean Sq F value  Pr(&gt;F)  
+## company_size  2  4.0565 2.02827  5.0564 0.01026 *
+## Residuals    47 18.8531 0.40113                  
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
+<pre class="r"><code># Perform post hoc t-tests for all significant univariate tests
+pairwise.t.test(divDatPercent$Black_or_African_American,
+                divDatPercent$company_size, p.adj=&quot;none&quot;)</code></pre>
+<pre><code>## 
+##  Pairwise comparisons using t tests with pooled SD 
+## 
+## data:  divDatPercent$Black_or_African_American and divDatPercent$company_size 
+## 
+##        large medium
+## medium 0.012 -     
+## small  0.135 0.263 
+## 
+## P value adjustment method: none</code></pre>
+<pre class="r"><code>pairwise.t.test(divDatPercent$Two_or_more_races,
+                divDatPercent$company_size, p.adj=&quot;none&quot;)</code></pre>
+<pre><code>## 
+##  Pairwise comparisons using t tests with pooled SD 
+## 
+## data:  divDatPercent$Two_or_more_races and divDatPercent$company_size 
+## 
+##        large  medium
+## medium 0.4753 -     
+## small  0.0073 0.0106
+## 
+## P value adjustment method: none</code></pre>
+<pre class="r"><code># Ran 14 tests, so Type I error rate = 1 - 0.95^X where X = tests run
+1 - ((0.95)^14)</code></pre>
+<pre><code>## [1] 0.512325</code></pre>
+<pre class="r"><code># Bonferroni Correction, usually 0.05/(number of tests)
+0.05/14</code></pre>
+<pre><code>## [1] 0.003571429</code></pre>
+<p>I’ve run a 7-way MANOVA so that’s 1 hypothesis test, 7 univariate tests so 7 hypotheses tests, and 2 pairwise tests with 3 tests each for 6 total. All in all, 14 hypotheses tests.</p>
+<p>The probability that I made a Type I error is given by <code>1-0.95^</code><em>X</em> where <em>X</em> is my number of tests. Since I’ve completed 14 hypothesis tests, the probability of a Type I error is <code>51.23%</code>.</p>
+<p>My Boneferroni adjusted significance level is <code>0.00357</code>. At this adjusted significance level, no tests are significant but the difference between small and large companies for Professionals that identify and report <code>Two or More Races</code> comes closest at <code>0.0073</code>.</p>
+<p>Just out of personal curiosity, I opted to run MANOVAs by gender as well and thought it was worth including in my project but all subsequent parts for MANOVA will reference the MANOVA test across ethnicities.</p>
+<div style="page-break-after: always;"></div>
+</div>
+<div id="manova-across-gender" class="section level2">
+<h2>MANOVA: Across Gender</h2>
+<div id="female" class="section level3">
+<h3>Female</h3>
+<pre class="r"><code>manovaFem &lt;- manova(cbind(Hispanic_or_Latino, White, Black_or_African_American,
+  Native_Hawaiian_or_Pacific_Islander, Asian, 
+  American_Indian_Alaskan_Native, Two_or_more_races) ~ company_size,
+  data = divDatPercentFem)
+
+summary(manovaFem, test=&quot;Pillai&quot;)</code></pre>
+<pre><code>##              Df  Pillai approx F num Df den Df Pr(&gt;F)
+## company_size  2 0.72604   1.3841     14     34 0.2138
+## Residuals    22</code></pre>
+<pre class="r"><code># Get univariate ANOVAs from MANOVA object
+summary.aov(manovaFem)</code></pre>
+<pre><code>##  Response Hispanic_or_Latino :
+##              Df Sum Sq Mean Sq F value Pr(&gt;F)  
+## company_size  2 11.571  5.7855  3.6999 0.0412 *
+## Residuals    22 34.402  1.5637                 
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+##  Response White :
+##              Df  Sum Sq Mean Sq F value Pr(&gt;F)
+## company_size  2  466.97  233.48  1.8086 0.1874
+## Residuals    22 2840.09  129.09               
+## 
+##  Response Black_or_African_American :
+##              Df Sum Sq Mean Sq F value Pr(&gt;F)
+## company_size  2 0.4856 0.24280  0.5795 0.5685
+## Residuals    22 9.2178 0.41899               
+## 
+##  Response Native_Hawaiian_or_Pacific_Islander :
+##              Df   Sum Sq  Mean Sq F value Pr(&gt;F)
+## company_size  2 0.023661 0.011831  0.8528 0.4398
+## Residuals    22 0.305187 0.013872               
+## 
+##  Response Asian :
+##              Df Sum Sq Mean Sq F value Pr(&gt;F)
+## company_size  2  88.26  44.132  1.5314 0.2384
+## Residuals    22 634.00  28.818               
+## 
+##  Response American_Indian_Alaskan_Native :
+##              Df   Sum Sq   Mean Sq F value Pr(&gt;F)
+## company_size  2 0.013473 0.0067364  1.0677 0.3609
+## Residuals    22 0.138803 0.0063092               
+## 
+##  Response Two_or_more_races :
+##              Df Sum Sq Mean Sq F value  Pr(&gt;F)  
+## company_size  2 2.4141  1.2071  3.6043 0.04426 *
+## Residuals    22 7.3678  0.3349                  
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
+<pre class="r"><code># Perform post hoc t-tests
+pairwise.t.test(divDatPercentFem$Hispanic_or_Latino,
+                divDatPercentFem$company_size, p.adj=&quot;none&quot;)</code></pre>
+<pre><code>## 
+##  Pairwise comparisons using t tests with pooled SD 
+## 
+## data:  divDatPercentFem$Hispanic_or_Latino and divDatPercentFem$company_size 
+## 
+##        large medium
+## medium 0.718 -     
+## small  0.033 0.025 
+## 
+## P value adjustment method: none</code></pre>
+<pre class="r"><code>pairwise.t.test(divDatPercentFem$Two_or_more_races,
+                divDatPercentFem$company_size, p.adj=&quot;none&quot;)</code></pre>
+<pre><code>## 
+##  Pairwise comparisons using t tests with pooled SD 
+## 
+## data:  divDatPercentFem$Two_or_more_races and divDatPercentFem$company_size 
+## 
+##        large medium
+## medium 0.340 -     
+## small  0.019 0.056 
+## 
+## P value adjustment method: none</code></pre>
+<pre class="r"><code># Ran 14 tests, so Type I error rate = 1 - 0.95^X where X = tests run
+1 - ((0.95)^14)</code></pre>
+<pre><code>## [1] 0.512325</code></pre>
+<pre class="r"><code># Bonferroni Correction, usually 0.05/(number of tests)
+0.05/14</code></pre>
+<pre><code>## [1] 0.003571429</code></pre>
+</div>
+<div id="male" class="section level3">
+<h3>Male</h3>
+<pre class="r"><code>manovaM &lt;- manova(cbind(Hispanic_or_Latino, White, Black_or_African_American,
+  Native_Hawaiian_or_Pacific_Islander, Asian, 
+  American_Indian_Alaskan_Native, Two_or_more_races) ~ company_size,
+  data = divDatPercentM)
+# Overall test is significant, need to follow up with one-way ANOVAs for each variable
+summary(manovaM, test=&quot;Pillai&quot;)</code></pre>
+<pre><code>##              Df  Pillai approx F num Df den Df  Pr(&gt;F)  
+## company_size  2 0.82699   1.7122     14     34 0.09925 .
+## Residuals    22                                         
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
+<pre class="r"><code># Get univariate ANOVAs from MANOVA object
+summary.aov(manovaM)</code></pre>
+<pre><code>##  Response Hispanic_or_Latino :
+##              Df  Sum Sq Mean Sq F value Pr(&gt;F)  
+## company_size  2  6.6577  3.3288  3.2146 0.0596 .
+## Residuals    22 22.7817  1.0355                 
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+##  Response White :
+##              Df  Sum Sq Mean Sq F value Pr(&gt;F)
+## company_size  2  372.95  186.48  1.7495 0.1972
+## Residuals    22 2345.01  106.59               
+## 
+##  Response Black_or_African_American :
+##              Df Sum Sq Mean Sq F value  Pr(&gt;F)  
+## company_size  2 3.2015 1.60074  4.9324 0.01699 *
+## Residuals    22 7.1398 0.32454                  
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+##  Response Native_Hawaiian_or_Pacific_Islander :
+##              Df   Sum Sq   Mean Sq F value  Pr(&gt;F)  
+## company_size  2 0.050794 0.0253968  3.9257 0.03484 *
+## Residuals    22 0.142327 0.0064694                  
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+##  Response Asian :
+##              Df  Sum Sq Mean Sq F value Pr(&gt;F)
+## company_size  2  230.65 115.323  1.2893 0.2955
+## Residuals    22 1967.89  89.449               
+## 
+##  Response American_Indian_Alaskan_Native :
+##              Df  Sum Sq  Mean Sq F value Pr(&gt;F)
+## company_size  2 0.03047 0.015234  0.6989 0.5078
+## Residuals    22 0.47953 0.021797               
+## 
+##  Response Two_or_more_races :
+##              Df  Sum Sq Mean Sq F value Pr(&gt;F)
+## company_size  2  1.7668 0.88342  1.7931 0.1899
+## Residuals    22 10.8388 0.49267</code></pre>
+<pre class="r"><code># Perform post hoc t-tests 
+pairwise.t.test(divDatPercentM$Black_or_African_American,
+                divDatPercentM$company_size, p.adj=&quot;none&quot;)</code></pre>
+<pre><code>## 
+##  Pairwise comparisons using t tests with pooled SD 
+## 
+## data:  divDatPercentM$Black_or_African_American and divDatPercentM$company_size 
+## 
+##        large medium
+## medium 0.005 -     
+## small  0.030 0.464 
+## 
+## P value adjustment method: none</code></pre>
+<pre class="r"><code>pairwise.t.test(divDatPercentM$Native_Hawaiian_or_Pacific_Islander,
+                divDatPercentM$company_size, p.adj=&quot;none&quot;)</code></pre>
+<pre><code>## 
+##  Pairwise comparisons using t tests with pooled SD 
+## 
+## data:  divDatPercentM$Native_Hawaiian_or_Pacific_Islander and divDatPercentM$company_size 
+## 
+##        large medium
+## medium 0.214 -     
+## small  0.313 0.011 
+## 
+## P value adjustment method: none</code></pre>
+<pre class="r"><code># Just for fun, not statistically significant but close and I identify with this group
+pairwise.t.test(divDatPercentM$Hispanic_or_Latino,
+                divDatPercentM$company_size, p.adj=&quot;none&quot;)</code></pre>
+<pre><code>## 
+##  Pairwise comparisons using t tests with pooled SD 
+## 
+## data:  divDatPercentM$Hispanic_or_Latino and divDatPercentM$company_size 
+## 
+##        large medium
+## medium 0.027 -     
+## small  0.035 0.959 
+## 
+## P value adjustment method: none</code></pre>
+<pre class="r"><code># Ran 17 t-tests, so Type I error rate = 1 - 0.95^X where X = tests run
+1 - ((0.95)^17)</code></pre>
+<pre><code>## [1] 0.5818797</code></pre>
+<pre class="r"><code># Bonferroni Correction, usually 0.05/(number of tests)
+0.05/17</code></pre>
+<pre><code>## [1] 0.002941176</code></pre>
+<p>I’ve run a 7-way MANOVA so that’s 1 hypothesis test, 7 univariate tests so 7 hypotheses tests, and 3 pairwise tests with 3 tests each for 9 total. All in all, 17 hypotheses tests.</p>
+<p>The probability that I made a Type I error is given by <code>1-0.95^</code><em>X</em> where <em>X</em> is my number of tests. Since I’ve completed 14 hypothesis tests, the probability of a Type I error is <code>58.19%</code>.</p>
+<p>My Boneferroni adjusted significance level is <code>0.00294</code>. At this adjusted significance level, no tests are significant.</p>
+<div style="page-break-after: always;"></div>
+</div>
+</div>
+<div id="manova-assumptions" class="section level2">
+<h2>MANOVA: Assumptions</h2>
+<p>I don’t meet the majority of the MANOVA assumptions. My dataset is not randomly sampled; it’s collected data from every companies’ new hires required by federal law. The companies whose data I am intepreting is not random, it’s just the ones that make the data publicly available online. They aren’t independent observations either because after changing my data to percents, the percent of all the groups are interrelated since they must add up to 100%. The distribution of small, medium, and large companies is roughly normally distributed with most companies being medium in size and a similar amount of large and small companies.</p>
+<pre class="r"><code>ggplot(divDatPercent, aes(x = Overall_totals, y = company_size)) + geom_point(aes(colour = gender)) +
+  geom_density_2d(h=10, aes(colour = gender)) + facet_wrap(~company_size) + coord_fixed(20/1) </code></pre>
+<p><img src="/project2_files/figure-html/unnamed-chunk-7-1.png" width="768" style="display: block; margin: auto;" />
+## MANOVA: Results
+When running the MANOVA test across ethnicities (independent of gender), I found that African Americans and those who identify with Two or More Races had a statistically significant difference in representation between company sizes. For African Americans, the difference between medium vs. large companies was statistically significant (p = 0.012). There were also differences between small vs. large companies (p = 0.135) and small vs. medium companies (p = 0.263) but these were not statistically significant. Meanwhile for those who identify with Two or More Races, the most significant differences came from small vs. large companies (p = 0.0073) and small vs. medium companies (p = 0.0106).</p>
+<p>I thought this was pretty interesting but was curious if this varied by gender so I ran another MANOVA test subsetting for male and female professionals. From my MANOVA on female professionals, I found Hispanic/Latino professionals and those who identify with Two or More Races had a significant difference in representation between company sizes. For female hispanic/latino professionals, there was a significant difference between small vs. large companies (p = 0.033) and small vs. medium companies (p = 0.025). Meanwhile for female professionals who identify with Two or More Races, small vs. large companies (p = 0.019) showed a significant difference and small vs. medium companies was just above the significance level (p = 0.056).</p>
+<p>From my MANOVA on male professionals, I found African American professionals and Native Hawaiian/Pacific Islanders had a significant difference in representation between company sizes. Hispanic/Latino male professionals were remarkably close to the cutoff but were not statistically significant (p = 0.0596). Interestingly, for African American male professionals the largest differences in representation came from medium vs. large companies (p = 0.005) and small vs. large companies (0.030). Male Native Hawaiian/Pacific Islander professionals showed significant differences in small vs. medium companies (p = 0.011) only. For hispanic/latino male professionals the significant differences were between small vs. large companies (p = 0.035) and medium vs. large companies (p = 0.027). Between small vs. medium companies, male hispanic professionals almost featured an identical mean average of representation with a p-value of 0.959! I think this was what influenced the original MANOVA result to not be statistically significant.</p>
+<div style="page-break-after: always;"></div>
+</div>
+</div>
+<div id="randomization-tests" class="section level1">
+<h1>Randomization Tests</h1>
+<pre class="r"><code>populationMean &lt;- mean(divDatPercentM$Hispanic_or_Latino)
+
+pool &lt;- divDatPercentM %&gt;% select(Hispanic_or_Latino, company) %&gt;%
+  pivot_wider(names_from = company, values_from = Hispanic_or_Latino)
+
+correct &lt;- vector()
+for (i in 1:10000) {
+  pick &lt;- sample(pool, 5)
+  correct[i] &lt;- (sum(pick)/5)
+}
+randomSampleMean &lt;- mean(correct)
+
+z &lt;- (randomSampleMean - populationMean)/(sd(correct)/sqrt(5))
+p &lt;- 2*pnorm(-abs(z))
+
+ggplot() + geom_histogram(aes(x = correct, y = ..count.. / sum(..count..)), fill = &quot;blue&quot;) + 
+  geom_vline(aes(xintercept=populationMean),color=&quot;red&quot;, linetype=&quot;dashed&quot;, size = 1)</code></pre>
+<p><img src="/project2_files/figure-html/unnamed-chunk-8-1.png" width="768" style="display: block; margin: auto;" />
+Null hypothesis: On average, the percent representation of hispanic male professionals in sampled Silicon Valley companies is <code>2.75%</code>.
+Alternative hypothesis: On average, the percent representation of hispanic male professionals in sampled Silicon Valley is not <code>2.75%</code>.</p>
+<p>I ran a 10,000 iteration Randomization Test on my sample of hispanic male professioanl percent representations across the 25 companies with data. I computed a z-score of <code>0.022</code> with a p-value of <code>0.9824</code> so I fail to reject the null hypothesis and report percent representation is <code>2.75%</code> with confidence.</p>
+<div style="page-break-after: always;"></div>
+</div>
+<div id="linear-regression-model-with-interaction" class="section level1">
+<h1>Linear Regression Model with Interaction</h1>
+<div id="mean-centering-ethnicity-percent-representation" class="section level3">
+<h3>Mean Centering Ethnicity Percent Representation</h3>
+<pre class="r"><code>divDatPercentMeanCentered &lt;- divDatPercent %&gt;% select(1:3)
+
+divDatPercentMeanCentered$Hispanic_or_Latino_Centered &lt;-
+  divDatPercent$Hispanic_or_Latino - mean(divDatPercent$Hispanic_or_Latino, na.rm=T)</code></pre>
+</div>
+<div id="linear-regression-model-with-mean-centered-variables" class="section level3">
+<h3>Linear Regression Model with Mean-Centered Variables</h3>
+<pre class="r"><code>lmCentered &lt;- lm(Hispanic_or_Latino_Centered ~ gender * company_size, 
+                 data = divDatPercentMeanCentered)
+summary(lmCentered)</code></pre>
+<pre><code>## 
+## Call:
+## lm(formula = Hispanic_or_Latino_Centered ~ gender * company_size, 
+##     data = divDatPercentMeanCentered)
+## 
+## Residuals:
+##     Min      1Q  Median      3Q     Max 
+## -2.4784 -0.3687 -0.0824  0.3271  4.5995 
+## 
+## Coefficients:
+##                               Estimate Std. Error t value Pr(&gt;|t|)   
+## (Intercept)                    -0.9252     0.5098  -1.815  0.07640 . 
+## gendermale                      2.2476     0.7210   3.117  0.00321 **
+## company_sizemedium              0.2439     0.6068   0.402  0.68970   
+## company_sizesmall               1.6173     0.6499   2.489  0.01669 * 
+## gendermale:company_sizemedium  -1.5240     0.8582  -1.776  0.08267 . 
+## gendermale:company_sizesmall   -2.9217     0.9191  -3.179  0.00271 **
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## Residual standard error: 1.14 on 44 degrees of freedom
+## Multiple R-squared:  0.2819, Adjusted R-squared:  0.2003 
+## F-statistic: 3.455 on 5 and 44 DF,  p-value: 0.01016</code></pre>
+<p>We would predict <code>-0.9252%</code> representation (mean-centered) on average for female hispanic professionals when a company is large.</p>
+<p>For hispanic professionals that are male and at a large-sized company, the percent representation (mean-centered) on average increases <code>2.2476%</code> (significant, p = 0.00321).</p>
+<p>For hispanic professionals that are female and at a medium-sized company, the percent representation (mean-centered) on average increases <code>0.2439%</code>.</p>
+<p>For hispanic professionals that are female and at a small-sized company, the percent representation (mean-centered) on average increases <code>1.6173%</code> (significant, p = 0.01669).</p>
+<p>We would predict <code>-1.5240%</code> representation (mean-centered) on average for male hispanic professionals when a company is medium.</p>
+<p>We would predict <code>-2.9217%</code> representation (mean-centered) on average for male hispanic professionals when a company is small (significant, p = 0.00271).</p>
+</div>
+<div id="plotting-with-ggplot" class="section level3">
+<h3>Plotting with <code>ggplot()</code></h3>
+<pre class="r"><code># Small: 0 - 2000, Medium : 2000 - 10,000, Large: 10,000 + 
+ggplot(divDatPercentMeanCentered) +
+  aes(x = Hispanic_or_Latino_Centered, y = company_size, color = gender) +
+  geom_point(aes(color = gender), size = 3, position = position_dodgev(height = 0.3)) +
+  geom_line(position = position_dodgev(height=0.3), size = 1) +
+  ggtitle(&quot;Percent Representation of Hispanic/Latino Professionals (mean centered) by Silicon Valley Company Size&quot;) + 
+  xlab(&quot;Hispanic/Latino Professionals % Representation (mean centered)&quot;) + 
+   ylab(&quot;Company Size (small (&lt; 2,000), medium (2,000 - 10,000), large (10,000+))&quot;) + 
+  theme(plot.title = element_text(size = 18, face=&quot;bold&quot;), 
+        axis.title.x = element_text(size=14, face=&quot;bold&quot;), 
+        axis.title.y = element_text(size=14, face=&quot;bold&quot;))</code></pre>
+<p><img src="/project2_files/figure-html/unnamed-chunk-11-1.png" width="768" style="display: block; margin: auto;" /></p>
+</div>
+<div id="checking-assumptions-linearity-normality-and-homoskedasticity" class="section level3">
+<h3>Checking Assumptions (linearity, normality, and homoskedasticity)</h3>
+<pre class="r"><code># Normality
+resids &lt;- lmCentered$residuals
+ggplot() + geom_histogram(aes(resids), bins = 10)</code></pre>
+<p><img src="/project2_files/figure-html/unnamed-chunk-12-1.png" width="768" style="display: block; margin: auto;" /></p>
+<pre class="r"><code># Linearity
+fitvals &lt;- lmCentered$fitted.values
+ggplot() + geom_point(aes(fitvals, resids)) + 
+  geom_hline(yintercept = 0, color = &#39;red&#39;)</code></pre>
+<p><img src="/project2_files/figure-html/unnamed-chunk-12-2.png" width="768" style="display: block; margin: auto;" /></p>
+<pre class="r"><code># Homoskedasticity
+bptest(lmCentered)</code></pre>
+<pre><code>## 
+##  studentized Breusch-Pagan test
+## 
+## data:  lmCentered
+## BP = 7.7467, df = 5, p-value = 0.1708</code></pre>
+<p>I passed all three assumptions check for my linear regression model. My data is linear, I confirmed normality by eyeballing a histogram of residuals, and ran the Breusch-Pagan test which confirmed homoskedasticity.</p>
+</div>
+<div id="robust-standard-errors" class="section level3">
+<h3>Robust Standard Errors</h3>
+<pre class="r"><code>coeftest(lmCentered, vcov = vcovHC(lmCentered))</code></pre>
+<pre><code>## 
+## t test of coefficients:
+## 
+##                               Estimate Std. Error t value  Pr(&gt;|t|)    
+## (Intercept)                   -0.92516    0.13778 -6.7149 2.996e-08 ***
+## gendermale                     2.24760    0.29746  7.5560 1.766e-09 ***
+## company_sizemedium             0.24388    0.23554  1.0354  0.306129    
+## company_sizesmall              1.61730    0.79040  2.0462  0.046744 *  
+## gendermale:company_sizemedium -1.52402    0.44166 -3.4506  0.001246 ** 
+## gendermale:company_sizesmall  -2.92172    0.98153 -2.9767  0.004722 ** 
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
+<p>When recomputing regression results with robust standard errors via <code>coefttest()</code>, I saw changes in the significance of <code>(Intercept)</code>, <code>gendermale</code>, <code>company_sizesmall</code>, <code>gendermale:company_sizemedium</code>, and <code>gendermale:company_sizesmall</code>. Most notably the addition of the `<code>(Intercept)</code> and <code>gendermale:company_sizemedium</code> being significant.</p>
+<p>We would predict <code>-0.9252%</code> representation (mean-centered) on average for female hispanic professionals when a company is large (significant, p &lt; 0.001).</p>
+<p>For hispanic professionals that are male and at a large-sized company, the percent representation (mean-centered) on average increases <code>2.2476%</code> (significant, p &lt; 0.001).</p>
+<p>For hispanic professionals that are female and at a small-sized company, the percent representation (mean-centered) on average increases <code>1.6173%</code> (significant, p = 0.046744).</p>
+<p>We would predict <code>-1.5240%</code> representation (mean-centered) on average for male hispanic professionals when a company is medium (significant, p = 0.001246).</p>
+<p>We would predict <code>-2.9217%</code> representation (mean-centered) on average for male hispanic professionals when a company is small (significant, p = 0.004722).</p>
+</div>
+<div id="proportion-of-the-variation-in-y-explained-by-regression-line-x" class="section level3">
+<h3>Proportion of the Variation in <em>Y</em> Explained by Regression Line (<em>X</em>)</h3>
+<pre class="r"><code>summary(lmCentered)$r.sq</code></pre>
+<pre><code>## [1] 0.2819177</code></pre>
+<p>My model explains 28.19% of the variation in the outcome.</p>
+<div style="page-break-after: always;"></div>
+</div>
+</div>
+<div id="bootstrapped-standard-errors" class="section level1">
+<h1>4. Bootstrapped Standard Errors</h1>
+<pre class="r"><code>set.seed(348)
+
+bootstrapDat &lt;- divDatPercentMeanCentered
+# Resample resids w/ replacement 
+resid_resamp &lt;- replicate(5000,{
+  # Resids to yhats to get new &quot;data&quot;
+  new_resids &lt;- sample(resids, replace = TRUE)
+  # Add new
+  bootstrapDat$new_y &lt;- fitvals + new_resids
+  # Refit model
+  fit &lt;- lm(new_y ~ gender * company_size, data = bootstrapDat)
+  # Save coefficient estimates
+  coef(fit) 
+})
+
+resid_resamp %&gt;% t %&gt;% as.data.frame %&gt;% summarize_all(sd) %&gt;% t</code></pre>
+<pre><code>##                                    [,1]
+## (Intercept)                   0.4848661
+## gendermale                    0.6725701
+## company_sizemedium            0.5840027
+## company_sizesmall             0.6176500
+## gendermale:company_sizemedium 0.8146283
+## gendermale:company_sizesmall  0.8682006</code></pre>
+<pre class="r"><code>lm(formula = Hispanic_or_Latino_Centered ~ gender * company_size, 
+    data = divDatPercentMeanCentered)</code></pre>
+<pre><code>## 
+## Call:
+## lm(formula = Hispanic_or_Latino_Centered ~ gender * company_size, 
+##     data = divDatPercentMeanCentered)
+## 
+## Coefficients:
+##                   (Intercept)                     gendermale             company_sizemedium  
+##                       -0.9252                         2.2476                         0.2439  
+##             company_sizesmall  gendermale:company_sizemedium   gendermale:company_sizesmall  
+##                        1.6173                        -1.5240                        -2.9217</code></pre>
+<p>After computing bootstrapped standard errors, I observed they were pretty close to my original Std. Errors (non robust). All of the Std. Errors for my Bootstrapped values are within 0.04 of the original Std Errors. Just like the original std. errors they greatly differ from the Robust SEs.</p>
+<div style="page-break-after: always;"></div>
+</div>
+<div id="logistic-regression-predicting-binary-categorical-variable" class="section level1">
+<h1>5. Logistic Regression Predicting Binary Categorical Variable</h1>
+<div id="glm-and-coefficient-estimate-interpretation-in-context" class="section level3">
+<h3>GLM and Coefficient Estimate Interpretation in Context</h3>
+<pre class="r"><code># Create binary categorical variable
+divDatGLM &lt;- divDatPercent %&gt;% mutate(y = ifelse(gender == &quot;male&quot;, 1, 0))
+head(divDatGLM)</code></pre>
+<pre><code>##   company company_size gender Hispanic_or_Latino  White Black_or_African_American
+## 1 23andMe        small   male              4.142 36.095                     1.183
+## 2 23andMe        small female              2.959 21.893                     1.183
+## 3   Adobe       medium   male              2.477 43.758                     0.826
+## 4   Adobe       medium female              1.982 13.309                     0.594
+## 5  Airbnb        small   male              2.291 31.013                     1.322
+## 6  Airbnb        small female              2.907 18.855                     1.410
+##   Native_Hawaiian_or_Pacific_Islander  Asian American_Indian_Alaskan_Native Two_or_more_races
+## 1                               0.000 13.609                          0.592             2.367
+## 2                               0.000 14.793                          0.000             1.183
+## 3                               0.297 22.226                          0.099             0.826
+## 4                               0.099 12.946                          0.132             0.429
+## 5                               0.264 24.581                          0.088             1.233
+## 6                               0.088 15.066                          0.000             0.881
+##   Overall_totals y
+## 1         57.988 1
+## 2         42.012 0
+## 3         70.509 1
+## 4         29.491 0
+## 5         60.793 1
+## 6         39.207 0</code></pre>
+<pre class="r"><code># GLM to predict gender
+glm &lt;- lm(y ~ Hispanic_or_Latino * company_size, data = divDatGLM,
+          family=binomial(link=&quot;logit&quot;))
+coeftest(glm)</code></pre>
+<pre><code>## 
+## t test of coefficients:
+## 
+##                                       Estimate Std. Error t value Pr(&gt;|t|)   
+## (Intercept)                           -0.56379    0.34963 -1.6125 0.114001   
+## Hispanic_or_Latino                     0.40007    0.12010  3.3311 0.001759 **
+## company_sizemedium                     0.48425    0.43426  1.1151 0.270855   
+## company_sizesmall                      1.23367    0.41333  2.9847 0.004621 **
+## Hispanic_or_Latino:company_sizemedium -0.12937    0.16449 -0.7865 0.435794   
+## Hispanic_or_Latino:company_sizesmall  -0.46041    0.13769 -3.3439 0.001696 **
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1</code></pre>
+<pre class="r"><code># Exponentiate Coefficients to interpret
+exp(coef(glm)) %&gt;% round(3) </code></pre>
+<pre><code>##                           (Intercept)                    Hispanic_or_Latino 
+##                                 0.569                                 1.492 
+##                    company_sizemedium                     company_sizesmall 
+##                                 1.623                                 3.434 
+## Hispanic_or_Latino:company_sizemedium  Hispanic_or_Latino:company_sizesmall 
+##                                 0.879                                 0.631</code></pre>
+<p><em>odds</em> = 0.569 * 1.492<sup><em>Hispanic</em></sup> * 1.623<sup><em>medium</em></sup> * 3.434<sup><em>small</em></sup> * 0.879<sup>(<em>Hispanic*medium</em>)</sup> * 0.631<sup>(<em>Hispanic*small</em>)</sup></p>
+<p><code>Intercept</code>: odds of being female as a hispanic professional in a large Silicon Valley company are: <code>0.569</code>.</p>
+<p><code>Hispanic_or_Latino</code>: in a large-sized Silicon Valley company, odds of being male as a hispanic professional are <code>1.492</code> times the odds of being female (49.2% greater).</p>
+<p><code>company_sizemedium</code>: in a medium-sized Silicon Valley company, odds of being female as a hispanic professional are <code>1.623</code> times the odds in large company.</p>
+<p><code>company_sizesmall</code>: in a small-sized Silicon Valley company, odds of being female as a hispanic professional are <code>3.434</code> times the odds in a large company.</p>
+<p><code>Hispanic_or_Latino:company_sizemedium</code>: odds of being a male hispanic professional at a medium sized company are <code>0.879</code> times as high as females hispanic professionals at large companies.</p>
+<p><code>Hispanic_or_Latino:company_sizesmall</code>: odds of being a male hispanic professional at a small sized company are <code>0.631</code> times as high as females hispanic professionals at large companies.</p>
+</div>
+<div id="confusion-matrix" class="section level3">
+<h3>Confusion Matrix</h3>
+<pre class="r"><code>divDatGLM &lt;- divDatGLM %&gt;% mutate(prob = predict(glm, type = &quot;response&quot;),
+                                  prediction = ifelse(prob &gt; .5, 1, 0))
+classify &lt;- divDatGLM %&gt;% transmute(prob, prediction, truth = y)
+
+table(prediction = classify$prediction, truth = classify$truth) %&gt;% addmargins()</code></pre>
+<pre><code>##           truth
+## prediction  0  1 Sum
+##        0   17  5  22
+##        1    8 20  28
+##        Sum 25 25  50</code></pre>
+</div>
+<div id="class-diagnostics" class="section level3">
+<h3>Class Diagnostics</h3>
+<pre class="r"><code>class_diag&lt;-function(probs,truth){
+  
+  if(is.numeric(truth)==FALSE &amp; is.logical(truth)==FALSE) truth&lt;-as.numeric(truth)-1
+  
+  tab&lt;-table(factor(probs&gt;.5,levels=c(&quot;FALSE&quot;,&quot;TRUE&quot;)),truth)
+  prediction&lt;-ifelse(probs&gt;.5,1,0)
+  acc=mean(truth==prediction)
+  sens=mean(prediction[truth==1]==1)
+  spec=mean(prediction[truth==0]==0)
+  ppv=mean(truth[prediction==1]==1)
+  
+  #CALCULATE EXACT AUC
+  ord&lt;-order(probs, decreasing=TRUE)
+  probs &lt;- probs[ord]; truth &lt;- truth[ord]
+  
+  TPR=cumsum(truth)/max(1,sum(truth)) 
+  FPR=cumsum(!truth)/max(1,sum(!truth))
+  
+  dup&lt;-c(probs[-1]&gt;=probs[-length(probs)], FALSE)
+  TPR&lt;-c(0,TPR[!dup],1); FPR&lt;-c(0,FPR[!dup],1)
+  
+  n &lt;- length(TPR)
+  auc&lt;- sum( ((TPR[-1]+TPR[-n])/2) * (FPR[-1]-FPR[-n]) )
+
+  data.frame(acc,sens,spec,ppv,auc)
+}
+class_diag(classify$prediction, classify$truth)</code></pre>
+<pre><code>##    acc sens spec       ppv  auc
+## 1 0.74  0.8 0.68 0.7142857 0.74</code></pre>
+<p>I computed an accuracy of <code>0.74</code>, sensitivity (TPR) of <code>0.8</code>, specificity (TNR) of <code>0.68</code>, recall (PPV) of <code>0.71</code> and an AUC of <code>0.74</code> (“fair” classification level).</p>
+</div>
+<div id="plot-density-of-log-odds" class="section level3">
+<h3>Plot Density of log-odds</h3>
+<pre class="r"><code>#get log-odds for everyone
+divDatGLM$logit &lt;- predict(glm, family=binomial(link=&quot;logit&quot;))
+
+## Density plot of log-odds for each outcome:
+divDatGLM %&gt;% ggplot() + geom_density(aes(logit, color = gender, fill = gender), alpha=.4) + 
+  geom_rug(aes(logit,color = gender))</code></pre>
+<p><img src="/project2_files/figure-html/unnamed-chunk-19-1.png" width="768" style="display: block; margin: auto;" /></p>
+</div>
+<div id="roc-curve-and-auc" class="section level3">
+<h3>ROC Curve and AUC</h3>
+<pre class="r"><code>library(plotROC)
+
+probs &lt;- predict(glm, type=&quot;response&quot;) #get predicted probs from model
+#geom_roc needs actual outcome (0,1) and predicted probability (or predictor if just one) 
+ROCplot &lt;- ggplot(glm) + geom_roc(aes(d = y, m = probs), n.cuts = 0)  +
+  labs(title = &quot;TPR against FPR&quot;, x = &quot;FPR&quot;, y = &quot;TPR&quot;)
+
+ROCplot</code></pre>
+<p><img src="/project2_files/figure-html/unnamed-chunk-20-1.png" width="768" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>calc_auc(ROCplot)</code></pre>
+<pre><code>##   PANEL group    AUC
+## 1     1    -1 0.8128</code></pre>
+<p>I calculated an AUC of 0.8128 (“good” classification level).</p>
+</div>
+<div id="k-fold-cross-validation" class="section level3">
+<h3>K-fold Cross Validation</h3>
+<pre class="r"><code>set.seed(348)
+# Number of folds
+k = 3
+
+# 10-fold cross validation code borrowed from Lab 11 
+divDatRand &lt;- divDatGLM[sample(nrow(divDatGLM)),] #put dataset in random order
+foldsProj &lt;- cut(seq(1:nrow(divDatGLM)), breaks = k, labels = F) #create folds
+
+diagsCV &lt;- NULL
+for (i in 1:k) {          # FOR EACH OF 10 FOLDS
+  train &lt;- divDatRand[foldsProj!=i, ] # CREATE TRAINING SET
+  test &lt;- divDatRand[foldsProj==i, ]  # CREATE TESTING SET
+
+  truthCV &lt;- test$y
+
+  fit &lt;- glm(y ~ Hispanic_or_Latino * company_size, data = train,
+             family=binomial(link=&quot;logit&quot;))
+
+  probsCV &lt;- predict(fit, type=&quot;response&quot;, newdata = test)
+
+  as.data.frame(probsCV)
+  as.data.frame(truthCV)
+  
+  diagsCV &lt;- rbind(diagsCV, class_diag(probsCV,truthCV)) #CV DIAGNOSTICS FOR EACH FOLD
+}
+# 0.74, 0.8, 0.68, 0.714, 0.74
+summarize_all(diagsCV, mean) #AVERAGE THE DIAGNOSTICS ACROSS THE 10 FOLDS</code></pre>
+<pre><code>##         acc     sens      spec       ppv       auc
+## 1 0.6384804 0.770202 0.5407407 0.6181818 0.7447811</code></pre>
+<p>After performing 3-fold CV (due to my small sample size), I computed an accurary of <code>0.657</code>, sensitivity of <code>.696</code>, specificity of <code>0.656</code>, and AUC of <code>0.73</code> (“fair” classification level). Comparing to my original logistic regression, my accuracy and sensitivity drop about 0.1 each but my specifcity, PPV, and AUC only drop slightly.</p>
+<div style="page-break-after: always;"></div>
+</div>
+</div>
+<div id="lasso-regression" class="section level1">
+<h1>LASSO Regression</h1>
+<pre class="r"><code># Create new binary categorical variable
+divDatPercentM$gender &lt;- NULL
+hispanicMaleMean &lt;- divDatPercentM$Hispanic_or_Latino %&gt;% mean()
+divDatLasso &lt;- divDatPercentM %&gt;% select(1:10) %&gt;% 
+  mutate(aboveMean = ifelse(Hispanic_or_Latino &gt;= hispanicMaleMean, 1, 0))
+
+glmLasso &lt;- glm(aboveMean ~ ., data = divDatLasso, family=binomial)
+
+# Using a lasso regression will set variables that aren&#39;t useful 
+# for predicting the response equal to zero: any variable with a non-zero
+# coefficient will be retained in the model. 
+datLasso &lt;- model.matrix(glmLasso)
+# Drop first column
+datLasso &lt;- datLasso[, -1]
+
+# Get response variable
+resp &lt;- as.matrix(divDatLasso$aboveMean)
+
+cv.lasso1 &lt;- cv.glmnet(x = datLasso, y = resp, family = &quot;binomial&quot;)
+lasso1 &lt;- glmnet(x = datLasso, y = resp, family = &quot;binomial&quot;, alpha = 1,
+                 lambda = cv.lasso1$lambda.1se)
+# Which coefficients are non zero? 
+coef(lasso1)</code></pre>
+<pre><code>## 35 x 1 sparse Matrix of class &quot;dgCMatrix&quot;
+##                                             s0
+## (Intercept)                         -5.8954630
+## companyAdobe                         .        
+## companyAirbnb                        .        
+## companyApple                         .        
+## companyCisco                         .        
+## companyeBay                          .        
+## companyFacebook                      .        
+## companyGoogle                        .        
+## companyHP Inc.                       .        
+## companyHPE                           .        
+## companyIntel                         .        
+## companyIntuit                        .        
+## companyLinkedIn                      0.5846281
+## companyLyft                          .        
+## companyMobileIron                    .        
+## companyNetApp                        .        
+## companyNvidia                        .        
+## companyPayPal                        0.4086391
+## companyPinterest                     .        
+## companySalesforce                    .        
+## companySanmina                       .        
+## companySquare                        .        
+## companyTwitter                       .        
+## companyUber                          .        
+## companyView                          .        
+## company_sizemedium                   .        
+## company_sizesmall                    .        
+## Hispanic_or_Latino                   1.9554356
+## White                                .        
+## Black_or_African_American            .        
+## Native_Hawaiian_or_Pacific_Islander  .        
+## Asian                                .        
+## American_Indian_Alaskan_Native       .        
+## Two_or_more_races                    .        
+## Overall_totals                       .</code></pre>
+<pre class="r"><code>lassoFit &lt;- glm(aboveMean ~ company_size, data = divDatLasso, family = &quot;binomial&quot;)
+
+lasso_prob &lt;- predict(lassoFit, newx = lasso_x_matrix, type = &quot;response&quot;)
+
+table(predicted = lasso_prob &gt; .5, truth = divDatLasso$aboveMean) %&gt;% addmargins</code></pre>
+<pre><code>##          truth
+## predicted  0  1 Sum
+##     FALSE 14  6  20
+##     TRUE   0  5   5
+##     Sum   14 11  25</code></pre>
+<pre class="r"><code>class_diag(lasso_prob, glmLasso$y)</code></pre>
+<pre><code>##    acc      sens spec ppv       auc
+## 1 0.76 0.4545455    1   1 0.7532468</code></pre>
+<p>I created a new binary categorical variable <code>aboveMean</code> to highlight companies that have hispanic male professional representation above the mean and below dummy coding it to 1 for true, 0 for false. I tend ran LASSO Regression on this variable. The variables that were retained were company:LinkedIn, company:PayPal, and Hispanic_or_Latino.</p>
+<div id="k-fold-cross-validation-on-lasso-regression-model" class="section level3">
+<h3>K-fold Cross Validation on LASSO Regression model</h3>
+<pre class="r"><code>set.seed(348)
+k = 3
+
+divDatLassoBestPredictive &lt;- divDatLasso %&gt;%
+  mutate(LinkedIn = ifelse(company == &quot;LinkedIn&quot;, 1, 0)) 
+divDatLassoBestPredictive &lt;- divDatLassoBestPredictive %&gt;%
+  mutate(PayPal = ifelse(company == &quot;PayPal&quot;, 1, 0)) 
+divDatLassoBestPredictive &lt;- divDatLassoBestPredictive %&gt;%
+  select(Hispanic_or_Latino, LinkedIn, PayPal, aboveMean)
+
+# 10-fold cross validation code borrowed from Lab 11 
+#put dataset in random order
+data1 &lt;- divDatLassoBestPredictive[sample(nrow(divDatLassoBestPredictive)),]
+#create folds
+folds &lt;- cut(seq(1:nrow(divDatLassoBestPredictive)), breaks = k, labels = F) 
+
+diags&lt;-NULL
+for (i in 1:k) {          # FOR EACH OF 10 FOLDS
+  train &lt;- data1[folds!=i,] # CREATE TRAINING SET
+  test &lt;- data1[folds==i,]  # CREATE TESTING SET
+
+  truth &lt;- test$aboveMean
+
+  fit &lt;- glm(aboveMean ~ Hispanic_or_Latino + LinkedIn + PayPal, data = train, family=&quot;binomial&quot;)
+
+  probs &lt;- predict(fit, type=&quot;response&quot;, newdata = test)
+
+  as.data.frame(probs)
+  as.data.frame(truth)
+  
+  diags &lt;- rbind(diags, class_diag(probs, truth)) #CV DIAGNOSTICS FOR EACH FOLD
+}
+
+summarize_all(diags, mean) #AVERAGE THE DIAGNOSTICS ACROSS THE 10 FOLDS</code></pre>
+<pre><code>##         acc sens spec ppv auc
+## 1 0.9212963 0.85    1   1   1</code></pre>
+<p>After running my 3-fold CV with the non-zero predictor variables, I computed an AUC of 1 which is significantly higher compared to my LASSO Regression’s of <code>0.753</code>. The TPR (sensitivity) rises from <code>0.45</code> to <code>0.867</code> while TNR (specificity) remains the same. Accuracy also improves from <code>0.76</code> to <code>0.921</code>.</p>
+<div style="page-break-after: always;"></div>
+</div>
+</div>
+<div id="findings-and-conclusion" class="section level1">
+<h1>7. Findings and Conclusion</h1>
+<p>Through my MANOVA tests I found that the groups that hard the starkest difference in representation between various company sizes were African Americans and those who identify with Two or More Races. For both these groups, the differences came between representation in small and large companies. When subsetting my data by gender, this proved to be the case for both female and male hispanic professionals, they showed significant differences between small and large companies in terms of representation. For female hispanic professionals, however, there was also a significant difference between small and medium sized companies. This was not the case with male hispanic professionals who virtually saw no difference between small and medium companies but did feature a significant difference in representation between medium and large companies.</p>
+<p>My randomization test showed the average representation of hispanic male professionals in Silicon Valley companies is 2.75%, sadly.</p>
+<p>Shifting to my linear regression model, it was interesting to compare within the same racial group how one gender had more representation than its counterpart at different company sizes. Male hispanic professionals featured a statistically significant difference in representation compared to their female counterparts when mean-centered (2.24% higher!). However, an interesting trend was observed. The smaller the company is, the more likely there is to be hispanic female representation amongst professionals and less likely to be hispanic male representation amongst professionals which I would have never imagined!</p>
+<p>Moving to Logistic Regression, I found that the odds of being male as a hispanic professional are 49.2% higher than those of being a female hispanic professional in Silicon Valley. Beyond this, the model confirmed my findings from the linear regression model showing the relationship that there is greater female hispanic professional representation at smaller companies compared to larger companies with male hispanic professionals showing the inverse relationship (more hispanic male professionals at large companies and fewer at small companies).</p>
+<p>Some of the limitations in my project where a small sample size of only 25 companies. As a result, I had to change my K-fold CV from 10-fold to 3-fold.</p>
+</div>
