@@ -1,0 +1,35 @@
+---
+title: Working in Python and R with Reticulate
+author: Santiago Moreno
+date: '2020-05-09'
+slug: working-with-python-and-r
+categories: []
+tags: []
+description: ''
+---
+
+```{R}
+library(dplyr)
+library(tidyr)
+library(reticulate)
+use_python("/usr/local/bin/python3")
+```
+
+# Tidying in R
+After spending quite a bit of time tidying in R this semester, I prefer tidying in R but still prefer to do analysis more programatically. 
+``` {R}
+iris2 <- iris %>% select(Species) %>% pull()
+```
+
+# Interpreting in Python
+Here I am using Python to do a basic demo of intepretation in Python
+```{python}
+counts = {}
+for val in r.iris2:
+  if val not in counts:
+     counts[val] = 0 
+  counts[val] += 1
+
+print(counts)
+```
+

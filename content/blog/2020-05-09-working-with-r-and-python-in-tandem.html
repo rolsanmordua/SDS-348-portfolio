@@ -1,0 +1,41 @@
+---
+title: Working in Python and R with Reticulate
+author: Santiago Moreno
+date: '2020-05-09'
+slug: working-with-python-and-r
+categories: []
+tags: []
+description: ''
+---
+
+
+
+<pre class="r"><code>library(dplyr)</code></pre>
+<pre><code>## 
+## Attaching package: &#39;dplyr&#39;</code></pre>
+<pre><code>## The following objects are masked from &#39;package:stats&#39;:
+## 
+##     filter, lag</code></pre>
+<pre><code>## The following objects are masked from &#39;package:base&#39;:
+## 
+##     intersect, setdiff, setequal, union</code></pre>
+<pre class="r"><code>library(tidyr)
+library(reticulate)
+use_python(&quot;/usr/local/bin/python3&quot;)</code></pre>
+<div id="tidying-in-r" class="section level1">
+<h1>Tidying in R</h1>
+<p>After spending quite a bit of time tidying in R this semester, I prefer tidying in R but still prefer to do analysis more programatically.</p>
+<pre class="r"><code>iris2 &lt;- iris %&gt;% select(Species) %&gt;% pull()</code></pre>
+</div>
+<div id="interpreting-in-python" class="section level1">
+<h1>Interpreting in Python</h1>
+<p>Here I am using Python to do a basic demo of intepretation in Python</p>
+<pre class="python"><code>counts = {}
+for val in r.iris2:
+  if val not in counts:
+     counts[val] = 0 
+  counts[val] += 1
+
+print(counts)</code></pre>
+<pre><code>## {&#39;setosa&#39;: 50, &#39;versicolor&#39;: 50, &#39;virginica&#39;: 50}</code></pre>
+</div>
